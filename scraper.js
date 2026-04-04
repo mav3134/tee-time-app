@@ -251,12 +251,11 @@ function parseForeUpJson(raw) {
                       slot.max_players     ?? slot.maxPlayers     ?? null;
 
       // Collect all prices and return highest (= 18 holes)
-      const priceFields = [slot.green_fee, slot.greenFee, slot.price, slot.Price,
-                           slot.rate, slot.total, slot.walk_rate, slot.ride_rate]
-        .filter(p => p !== null && p !== undefined && p !== false)
-        .map(p => parseFloat(p))
-        .filter(p => !isNaN(p) && p > 0 && p < 500);
-      const price = priceFields.length > 0 ? Math.max(...priceFields) : null;
+     // foreUP splits green fee + cart fee — add them for total price
+      const greenFee = parseFloat(slot.green_fee ?? slot.greenFee ?? slot.price ?? 0) || 0;
+      const cartFee  = parseFloat(slot.cart_fee  ?? slot.cartFee  ?? slot.ride_rate ?? 0) || 0;
+      const total    = greenFee + cartFee;
+      const price    = total > 0 ? total : null;
 
       // Parse "2026-04-07 08:33" format
       let normalized = null;
