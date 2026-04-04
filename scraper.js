@@ -13,6 +13,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const interceptedResponses = [];
   let apiRequestHeaders = null;
   let apiBaseUrl        = null;
+  const isForeUp = /foreupsoftware\.com/i.test(course.url);
 
   page.on('request', (request) => {
     const url = request.url();
@@ -20,8 +21,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       apiRequestHeaders = request.headers();
       apiBaseUrl        = url;
     }
-    // Capture ClubCaddie internal slot API calls
-    if (url.includes('clubcaddie.com') && url.includes('/slots') && url.includes('Interaction=')) {
+    if (url.includes('foreupsoftware.com') && url.includes('/api/booking/times')) {
       apiRequestHeaders = request.headers();
       apiBaseUrl        = url;
     }
@@ -33,14 +33,13 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (response.status() !== 200) return;
       const url = response.url();
       if (/google|facebook|analytics|gtm|pixel|ads|doubleclick/i.test(url)) return;
-      // Capture JSON AND plain text responses from booking APIs
-      if (!contentType.includes('json') && !contentType.includes('text/plain') && !contentType.includes('text/html')) return;
+      if (!contentType.includes('json') && !contentType.includes('text/plain')) return;
       const text = await response.text();
       if (!text || text.length < 30) return;
-      // Only keep if it looks like slot/tee time data
-      if (url.includes('clubcaddie.com') && url.includes('/slots')) {
+      // Always capture foreUP responses
+      if (url.includes('foreupsoftware.com')) {
         interceptedResponses.push({ url, text });
-      } else if (contentType.includes('json') && /\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
+      } else if (/\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
         interceptedResponses.push({ url, text });
       }
     } catch { /* ignore */ }
@@ -49,15 +48,14 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   try {
     const fetchUrl = buildUrl(course.url, dateStr);
     await page.goto(fetchUrl, { waitUntil: 'load', timeout: 45000 });
-    await page.waitForTimeout(6000);
 
-    // Log what we intercepted for debugging
+    // foreUP is a heavy React app — needs more time
+    const waitMs = isForeUp ? 10000 : 6000;
+    await page.waitForTimeout(waitMs);
+
     console.log(`  [${course.name}] Intercepted ${interceptedResponses.length} responses`);
-    for (const r of interceptedResponses) {
-      console.log(`  [${course.name}] Response from: ${r.url.substring(0, 100)}`);
-      console.log(`  [${course.name}] Preview: ${r.text.substring(0, 200)}`);
-    }
 
+    // Build facility map for Kenna
     const facilityMap = {};
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities')) {
@@ -72,7 +70,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
 
     // Re-fire captured API with correct date
     if (apiBaseUrl && dateStr) {
-      const correctedUrl = buildUrl(apiBaseUrl, dateStr);
+      const correctedUrl = buildApiUrl(apiBaseUrl, dateStr, isForeUp);
       console.log(`  [${course.name}] Re-firing API: ${correctedUrl.substring(0, 120)}`);
       try {
         const response = await context.request.fetch(correctedUrl, {
@@ -86,10 +84,10 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
             console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`);
             await browser.close(); return kennaTimes;
           }
-          const ccTimes = parseClubCaddieSlots(refiredText);
-          if (ccTimes !== null && ccTimes.length > 0) {
-            console.log(`  [${course.name}] ✓ Found ${ccTimes.length} times (ClubCaddie)`);
-            await browser.close(); return ccTimes;
+          const foreUpTimes = parseForeUpJson(refiredText);
+          if (foreUpTimes !== null && foreUpTimes.length > 0) {
+            console.log(`  [${course.name}] ✓ Found ${foreUpTimes.length} times (foreUP)`);
+            await browser.close(); return foreUpTimes;
           }
           const genericTimes = parseGenericJson(refiredText, filterByName ? course.name : null);
           if (genericTimes !== null && genericTimes.length > 0) {
@@ -108,10 +106,12 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     // Try all intercepted responses
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
+      console.log(`  [${course.name}] Trying intercepted: ${r.url.substring(0, 80)}`);
+      console.log(`  [${course.name}] Preview: ${r.text.substring(0, 200)}`);
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
       if (kennaTimes !== null && kennaTimes.length > 0) { await browser.close(); return kennaTimes; }
-      const ccTimes = parseClubCaddieSlots(r.text);
-      if (ccTimes !== null && ccTimes.length > 0) { await browser.close(); return ccTimes; }
+      const foreUpTimes = parseForeUpJson(r.text);
+      if (foreUpTimes !== null && foreUpTimes.length > 0) { await browser.close(); return foreUpTimes; }
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
@@ -139,11 +139,28 @@ function buildUrl(url, dateStr) {
   if (/foreup/i.test(url)) {
     const [y, m, d] = dateStr.split('-');
     const fDate = `${m}-${d}-${y}`;
-    if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + fDate);
-    return url + (url.includes('?') ? '&' : '?') + 'date=' + fDate;
+    // Strip hash, add date param before hash
+    const hashIdx = url.indexOf('#');
+    const base    = hashIdx !== -1 ? url.substring(0, hashIdx) : url;
+    const hash    = hashIdx !== -1 ? url.substring(hashIdx) : '';
+    if (base.includes('date=')) return base.replace(/date=[^&]*/i, 'date=' + fDate) + hash;
+    return base + (base.includes('?') ? '&' : '?') + 'date=' + fDate + hash;
   }
   if (!url.includes('date=')) return url + (url.includes('?') ? '&' : '?') + 'date=' + dateStr;
   return url.replace(/date=[^&]*/i, 'date=' + dateStr);
+}
+
+// For re-firing API calls with a corrected date
+function buildApiUrl(url, dateStr, isForeUp) {
+  if (isForeUp) {
+    const [y, m, d] = dateStr.split('-');
+    const fDate = `${m}-${d}-${y}`;
+    if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + fDate);
+    return url + (url.includes('?') ? '&' : '?') + 'date=' + fDate;
+  }
+  // Kenna uses YYYY-MM-DD
+  if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + dateStr);
+  return url + (url.includes('?') ? '&' : '?') + 'date=' + dateStr;
 }
 
 async function extractTeeTimes(page, originalUrl, courseName) {
@@ -211,22 +228,38 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
   } catch { return null; }
 }
 
-function parseClubCaddieSlots(raw) {
+// foreUP API returns array of tee time objects
+function parseForeUpJson(raw) {
   try {
-    const data  = JSON.parse(raw);
-    const slots = Array.isArray(data) ? data : (data.slots || data.Slots || data.data || null);
-    if (!slots) return null;
+    const data = JSON.parse(raw);
+    // foreUP returns array directly or under a key
+    const slots = Array.isArray(data) ? data :
+                  Array.isArray(data.data) ? data.data :
+                  Array.isArray(data.tee_times) ? data.tee_times :
+                  Array.isArray(data.teeTimes) ? data.teeTimes : null;
+    if (!slots || !slots.length) return null;
+
+    // Check if it looks like foreUP data (has time field in foreUP format)
+    const sample = slots[0];
+    if (!sample) return null;
+    const hasForeUpFields = 'time' in sample || 'tee_time' in sample || 'teetime' in sample ||
+                            'green_fee' in sample || 'available_spots' in sample;
+    if (!hasForeUpFields) return null;
+
     const times = [];
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
-      const rawTime = slot.Time || slot.time || slot.StartTime || slot.startTime || '';
-      if (!rawTime) continue;
-      const avail = slot.AvailableSpots ?? slot.availableSpots ?? slot.Available ?? slot.available ?? slot.Players ?? slot.players ?? null;
-      const price = slot.Price ?? slot.price ?? slot.GreenFee ?? slot.greenFee ?? slot.Rate ?? slot.rate ?? slot.Total ?? slot.total ?? null;
-      const isAvail = slot.IsAvailable ?? slot.isAvailable ?? slot.Available ?? slot.available;
-      if (isAvail === false || isAvail === 0) continue;
+      const rawTime = slot.time || slot.tee_time || slot.teetime || slot.Time || '';
+      const avail   = slot.available_spots ?? slot.availableSpots ?? slot.spots ??
+                      slot.max_players ?? slot.maxPlayers ?? null;
+      // Find highest price (18 holes)
+      let price = null;
+      const prices = [slot.green_fee, slot.greenFee, slot.price, slot.Price,
+                      slot.rate, slot.Rate, slot.total, slot.Total].filter(p => p !== null && p !== undefined);
+      if (prices.length > 0) price = Math.max(...prices.map(p => parseFloat(p)));
+
       const normalized = parseAnyTime(rawTime);
-      if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price: price !== null ? parseFloat(price) : null });
+      if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price: price !== null && !isNaN(price) ? price : null });
     }
     return times.length > 0 ? times : null;
   } catch { return null; }
@@ -317,6 +350,16 @@ function scrapeVisibleText(text) {
   return times;
 }
 
+function extractSpots(ctx) {
+  const text = ctx.replace(/<[^>]+>/g, ' ');
+  for (const p of [/(\d)\s*player/i, /(\d)\s*spot/i, /(\d)\s*available/i,
+                   /available[:\s]+(\d)/i, /opening[s]?[:\s]+(\d)/i, /remaining[:\s]+(\d)/i]) {
+    const m = text.match(p);
+    if (m) { const n = parseInt(m[1]); if (n >= 0 && n <= 4) return n; }
+  }
+  return null;
+}
+
 function extractPrice(ctx) {
   const patterns = [
     /\$\s*(\d+(?:\.\d{1,2})?)/g,
@@ -335,16 +378,6 @@ function extractPrice(ctx) {
     }
   }
   return highest;
-}
-
-function extractSpots(ctx) {
-  const text = ctx.replace(/<[^>]+>/g, ' ');
-  for (const p of [/(\d)\s*player/i, /(\d)\s*spot/i, /(\d)\s*available/i,
-                   /available[:\s]+(\d)/i, /opening[s]?[:\s]+(\d)/i, /remaining[:\s]+(\d)/i]) {
-    const m = text.match(p);
-    if (m) { const n = parseInt(m[1]); if (n >= 0 && n <= 4) return n; }
-  }
-  return null;
 }
 
 function normalizeTime(t) { return parseAnyTime(t); }
