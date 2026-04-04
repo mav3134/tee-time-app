@@ -13,10 +13,11 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const interceptedResponses = [];
   let apiRequestHeaders = null;
   let apiBaseUrl        = null;
+  const isClubCaddieDirectUrl = /clubcaddie\.com.*\/slots/i.test(course.url);
 
   page.on('request', (request) => {
     const url = request.url();
-    if (url.includes('kenna.io/v2/tee-times') || (url.includes('clubcaddie.com') && url.includes('/slots'))) {
+    if (url.includes('kenna.io/v2/tee-times')) {
       apiRequestHeaders = request.headers();
       apiBaseUrl        = url;
     }
@@ -40,7 +41,24 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   try {
     const fetchUrl = buildUrl(course.url, dateStr);
     await page.goto(fetchUrl, { waitUntil: 'load', timeout: 45000 });
-    await page.waitForTimeout(6000);
+    await page.waitForTimeout(isClubCaddieDirectUrl ? 3000 : 6000);
+
+    // For ClubCaddie direct API URLs, parse the page body as JSON directly
+    if (isClubCaddieDirectUrl) {
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      console.log(`  [${course.name}] ClubCaddie body preview: ${bodyText.substring(0, 300)}`);
+      const ccTimes = parseClubCaddieSlots(bodyText);
+      if (ccTimes !== null && ccTimes.length > 0) {
+        console.log(`  [${course.name}] ✓ Found ${ccTimes.length} times (ClubCaddie body)`);
+        await browser.close();
+        return ccTimes;
+      }
+      // Fall back to text scrape if JSON parse fails
+      const textTimes = scrapeVisibleText(bodyText);
+      console.log(`  [${course.name}] Text scrape found ${textTimes.length} times`);
+      await browser.close();
+      return textTimes;
+    }
 
     const facilityMap = {};
     for (const r of interceptedResponses) {
@@ -64,16 +82,10 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         if (response.ok()) {
           const refiredText = await response.text();
           console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 300)}`);
-
           const kennaTimes = parseKennaJson(refiredText, course.name, facilityMap, filterByName);
           if (kennaTimes !== null && kennaTimes.length > 0) {
             console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`);
             await browser.close(); return kennaTimes;
-          }
-          const ccTimes = parseClubCaddieSlots(refiredText);
-          if (ccTimes !== null && ccTimes.length > 0) {
-            console.log(`  [${course.name}] ✓ Found ${ccTimes.length} times (ClubCaddie)`);
-            await browser.close(); return ccTimes;
           }
           const genericTimes = parseGenericJson(refiredText, filterByName ? course.name : null);
           if (genericTimes !== null && genericTimes.length > 0) {
@@ -93,8 +105,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
       if (kennaTimes !== null && kennaTimes.length > 0) { await browser.close(); return kennaTimes; }
-      const ccTimes = parseClubCaddieSlots(r.text);
-      if (ccTimes !== null && ccTimes.length > 0) { await browser.close(); return ccTimes; }
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
@@ -202,8 +212,9 @@ function parseClubCaddieSlots(raw) {
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
       const rawTime = slot.Time || slot.time || slot.StartTime || slot.startTime || '';
-      const avail   = slot.AvailableSpots ?? slot.availableSpots ?? slot.Available ?? slot.available ?? slot.Players ?? slot.players ?? null;
-      const price   = slot.Price ?? slot.price ?? slot.GreenFee ?? slot.greenFee ?? slot.Rate ?? slot.rate ?? slot.Total ?? slot.total ?? null;
+      if (!rawTime) continue;
+      const avail = slot.AvailableSpots ?? slot.availableSpots ?? slot.Available ?? slot.available ?? slot.Players ?? slot.players ?? null;
+      const price = slot.Price ?? slot.price ?? slot.GreenFee ?? slot.greenFee ?? slot.Rate ?? slot.rate ?? slot.Total ?? slot.total ?? null;
       const isAvail = slot.IsAvailable ?? slot.isAvailable ?? slot.Available ?? slot.available;
       if (isAvail === false || isAvail === 0) continue;
       const normalized = parseAnyTime(rawTime);
@@ -254,7 +265,6 @@ function parseAnyTime(rawTime) {
     try {
       const d = new Date(t);
       if (isNaN(d)) return null;
-      // Convert UTC to Eastern Time (Railway server runs in UTC)
       const eastern = new Date(d.toLocaleString('en-US', { timeZone: 'America/Detroit' }));
       const h       = eastern.getHours();
       const m       = eastern.getMinutes();
