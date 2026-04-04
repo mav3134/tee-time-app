@@ -66,7 +66,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         });
         if (response.ok()) {
           const refiredText = await response.text();
-          console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 300)}`);
+          console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 800)}`);
           const kennaTimes = parseKennaJson(refiredText, course.name, facilityMap, filterByName);
           if (kennaTimes !== null && kennaTimes.length > 0) {
             console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times`);
