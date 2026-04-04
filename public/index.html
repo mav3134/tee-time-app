@@ -47,66 +47,64 @@
   .btn-refresh:hover:not(:disabled) { background: #e8f5e9; transform: translateY(-1px); }
   .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-  .layout { display: grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 80px); }
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 80px); }
 
   aside {
     background: var(--surface); border-right: 2px solid var(--border);
-    padding: 24px 20px; display: flex; flex-direction: column; gap: 20px;
+    padding: 18px 14px; display: flex; flex-direction: column; gap: 16px;
   }
-  .section-title { font-family: var(--mono); font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-  .add-form { display: flex; flex-direction: column; gap: 8px; }
+  .section-title { font-family: var(--mono); font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .add-form { display: flex; flex-direction: column; gap: 7px; }
   input[type="text"], input[type="url"] {
     background: var(--bg); border: 1.5px solid var(--border); color: var(--text);
-    border-radius: 4px; padding: 9px 11px; font-family: var(--sans); font-size: 13px;
+    border-radius: 4px; padding: 7px 9px; font-family: var(--sans); font-size: 12px;
     width: 100%; outline: none; transition: border-color 0.15s;
   }
   input:focus { border-color: var(--green); }
   input::placeholder { color: var(--muted); }
   .btn-add {
     background: var(--green); color: #fff; font-family: var(--sans); font-weight: 600;
-    font-size: 13px; border: none; border-radius: 4px; padding: 9px; cursor: pointer; transition: background 0.15s;
+    font-size: 12px; border: none; border-radius: 4px; padding: 8px; cursor: pointer; transition: background 0.15s;
   }
   .btn-add:hover { background: #235c42; }
 
-  /* Course list with toggles */
-  .course-list { display: flex; flex-direction: column; gap: 6px; }
+  /* Course list — name only, compact */
+  .course-list { display: flex; flex-direction: column; gap: 4px; }
   .course-item {
-    background: var(--bg); border: 1.5px solid var(--border); border-radius: 6px;
-    padding: 9px 11px; display: flex; align-items: center; gap: 8px;
+    background: var(--bg); border: 1.5px solid var(--border); border-radius: 5px;
+    padding: 5px 8px; display: flex; align-items: center; gap: 6px;
     animation: slideIn 0.2s ease; transition: opacity 0.2s;
   }
   .course-item.disabled { opacity: 0.4; }
   @keyframes slideIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
-  .course-item-info { flex: 1; min-width: 0; }
-  .ci-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ci-url  { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ci-name { flex: 1; font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
   /* Toggle switch */
-  .toggle { position: relative; width: 34px; height: 20px; flex-shrink: 0; cursor: pointer; }
+  .toggle { position: relative; width: 30px; height: 18px; flex-shrink: 0; cursor: pointer; }
   .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
   .toggle-track {
     position: absolute; inset: 0; background: var(--border);
-    border-radius: 20px; transition: background 0.2s;
+    border-radius: 18px; transition: background 0.2s;
   }
   .toggle-track::after {
-    content: ''; position: absolute; left: 3px; top: 3px;
+    content: ''; position: absolute; left: 2px; top: 2px;
     width: 14px; height: 14px; background: #fff; border-radius: 50%;
     transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
   }
   .toggle input:checked + .toggle-track { background: var(--green); }
-  .toggle input:checked + .toggle-track::after { transform: translateX(14px); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(12px); }
 
-  .btn-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 3px; transition: color 0.1s; flex-shrink: 0; }
+  .btn-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 1px 3px; border-radius: 3px; transition: color 0.1s; flex-shrink: 0; }
   .btn-remove:hover { color: #c0392b; }
-  .empty-courses { font-size: 12px; color: var(--muted); text-align: center; padding: 14px; border: 1.5px dashed var(--border); border-radius: 6px; }
+  .empty-courses { font-size: 11px; color: var(--muted); text-align: center; padding: 12px; border: 1.5px dashed var(--border); border-radius: 6px; }
 
-  main { padding: 28px 32px; display: flex; flex-direction: column; gap: 18px; overflow-x: auto; }
+  main { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; overflow-x: auto; }
 
   /* Time range slider */
   .time-filter {
-    background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; padding: 14px 18px;
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 16px;
   }
-  .time-filter-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .time-filter-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .time-filter-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
   .time-range-display { font-family: var(--mono); font-size: 13px; color: var(--green); font-weight: 500; }
   .dual-slider { position: relative; height: 22px; padding: 0 2px; }
@@ -121,28 +119,16 @@
     -webkit-appearance: none; pointer-events: all;
     width: 20px; height: 20px; border-radius: 50%;
     background: var(--green); cursor: pointer;
-    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-    margin-top: -8px;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3); margin-top: -8px;
   }
   .dual-slider input[type="range"]::-webkit-slider-thumb:hover { background: #235c42; }
 
-  #status-bar { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 4px; }
+  /* Status bar — single line, no progress log */
+  #status-bar { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; flex-shrink: 0; }
   .status-dot.running { background: #f4a261; animation: pulse 0.7s ease-in-out infinite; }
   .status-dot.done    { background: var(--green); }
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
-
-  #progress-log {
-    background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px;
-    padding: 14px 18px; font-family: var(--mono); font-size: 12px;
-    display: none; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto;
-  }
-  #progress-log.visible { display: flex; }
-  .log-line { display: flex; align-items: center; gap: 10px; }
-  .log-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .log-dot.scraping { background: #f4a261; animation: pulse 0.8s ease-in-out infinite; }
-  .log-dot.done     { background: var(--green); }
-  .log-dot.error    { background: #e74c3c; }
 
   .table-wrap { overflow-x: auto; border: 2px solid var(--border); border-radius: 8px; background: var(--surface); }
   table { border-collapse: collapse; min-width: 100%; font-size: 12px; }
@@ -151,7 +137,7 @@
     letter-spacing: 1px; padding: 8px 4px; white-space: nowrap; text-align: center;
     border-right: 1px solid #235c42; position: sticky; top: 0; min-width: 62px;
   }
-  thead th:first-child { text-align: left; padding-left: 14px; min-width: 160px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #235c42; }
+  thead th:first-child { text-align: left; padding-left: 14px; min-width: 140px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #235c42; }
   tbody tr { border-bottom: 1px solid var(--border); }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover td { background: #f9f6f0; }
@@ -206,7 +192,7 @@
       <p class="section-title">Add Course</p>
       <div class="add-form">
         <input type="text" id="inp-name" placeholder="Course name" />
-        <input type="url"  id="inp-url"  placeholder="https://booking page URL..." />
+        <input type="url"  id="inp-url"  placeholder="https://booking URL..." />
         <button class="btn-add" onclick="addCourse()">+ Add Course</button>
       </div>
     </div>
@@ -218,23 +204,22 @@
 
   <main>
     <div id="status-bar">
-      <span><span class="status-dot" id="status-dot"></span><span id="status-text">Add courses and hit Refresh</span></span>
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Add courses and hit Refresh</span>
     </div>
 
     <div class="time-filter">
       <div class="time-filter-top">
         <span class="time-filter-label">Time Range</span>
-        <span class="time-range-display" id="range-display">7:00 AM — 6:00 PM</span>
+        <span class="time-range-display" id="range-display">6:00 AM — 6:00 PM</span>
       </div>
       <div class="dual-slider">
         <div class="slider-track"></div>
         <div class="slider-fill" id="slider-fill"></div>
-        <input type="range" id="slider-min" min="0" max="66" value="0"  oninput="onSliderChange()" />
-        <input type="range" id="slider-max" min="0" max="66" value="66" oninput="onSliderChange()" />
+        <input type="range" id="slider-min" min="0" max="72" value="0"  oninput="onSliderChange()" />
+        <input type="range" id="slider-max" min="0" max="72" value="72" oninput="onSliderChange()" />
       </div>
     </div>
-
-    <div id="progress-log"></div>
 
     <div class="legend" id="legend" style="display:none">
       <div class="legend-item"><div class="legend-dot" style="background:#d8f3dc"></div> 3–4 spots</div>
@@ -253,7 +238,6 @@
 </div>
 
 <script>
-// ── All time slots 7am–6pm in 10-min steps ───────────────────
 const START_H = 6, END_H = 18;
 function getSlots() {
   const s = [];
@@ -267,9 +251,9 @@ function getSlots() {
   }
   return s;
 }
-const ALL_SLOTS = getSlots(); // 67 slots
+const ALL_SLOTS = getSlots();
 
-// ── Toggle state (localStorage) ──────────────────────────────
+// ── Toggle state ──────────────────────────────────────────────
 function getDisabled() { try { return JSON.parse(localStorage.getItem('disabled_courses') || '[]'); } catch { return []; } }
 function saveDisabled(a) { localStorage.setItem('disabled_courses', JSON.stringify(a)); }
 function isCourseEnabled(id) { return !getDisabled().includes(id); }
@@ -278,7 +262,6 @@ function toggleCourse(id) {
   i === -1 ? d.push(id) : d.splice(i, 1);
   saveDisabled(d);
   renderCourseList();
-  // If we have results, rebuild the table immediately with enabled courses only
   if (lastResults.length > 0) rebuildTableFromResults();
 }
 
@@ -287,31 +270,21 @@ function onSliderChange() {
   let minV = parseInt(document.getElementById('slider-min').value);
   let maxV = parseInt(document.getElementById('slider-max').value);
   const total = ALL_SLOTS.length - 1;
-
-  // Prevent handles crossing — enforce at least 1 slot gap
   if (minV >= maxV) {
-    if (document.activeElement.id === 'slider-min') {
-      minV = maxV - 1;
-      document.getElementById('slider-min').value = minV;
-    } else {
-      maxV = minV + 1;
-      document.getElementById('slider-max').value = maxV;
-    }
+    if (document.activeElement.id === 'slider-min') { minV = maxV - 1; document.getElementById('slider-min').value = minV; }
+    else { maxV = minV + 1; document.getElementById('slider-max').value = maxV; }
   }
-
-  const lp = (minV / total) * 100;
-  const rp = (maxV / total) * 100;
+  const lp = (minV / total) * 100, rp = (maxV / total) * 100;
   const fill = document.getElementById('slider-fill');
   fill.style.left  = `calc(${lp}% + 2px)`;
   fill.style.width = `calc(${rp - lp}% - 4px)`;
-
   document.getElementById('range-display').textContent = `${ALL_SLOTS[minV]} — ${ALL_SLOTS[maxV]}`;
   applyTimeFilter();
 }
 
 function applyTimeFilter() {
-  const minV  = parseInt(document.getElementById('slider-min').value);
-  const maxV  = parseInt(document.getElementById('slider-max').value);
+  const minV = parseInt(document.getElementById('slider-min').value);
+  const maxV = parseInt(document.getElementById('slider-max').value);
   const table = document.getElementById('tee-table');
   if (!table) return;
   table.querySelectorAll('tr').forEach(row => {
@@ -322,7 +295,7 @@ function applyTimeFilter() {
   });
 }
 
-// ── Courses (stored in localStorage) ─────────────────────────
+// ── Courses ───────────────────────────────────────────────────
 let courses = [];
 
 function loadCourses() {
@@ -337,11 +310,8 @@ function renderCourseList() {
   el.innerHTML = courses.map(c => {
     const on = isCourseEnabled(c.id);
     return `<div class="course-item ${on ? '' : 'disabled'}">
-      <div class="course-item-info">
-        <div class="ci-name">${esc(c.name)}</div>
-        <div class="ci-url">${esc(c.url)}</div>
-      </div>
-      <label class="toggle" title="${on ? 'Click to disable' : 'Click to enable'}">
+      <div class="ci-name" title="${esc(c.name)}">${esc(c.name)}</div>
+      <label class="toggle" title="${on ? 'Disable' : 'Enable'}">
         <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleCourse(${c.id})" />
         <span class="toggle-track"></span>
       </label>
@@ -350,7 +320,7 @@ function renderCourseList() {
   }).join('');
 }
 
-async function addCourse() {
+function addCourse() {
   const name = document.getElementById('inp-name').value.trim();
   const url  = document.getElementById('inp-url').value.trim();
   if (!name || !url) { alert('Please enter both a name and URL.'); return; }
@@ -362,7 +332,7 @@ async function addCourse() {
   document.getElementById('inp-url').value  = '';
 }
 
-async function deleteCourse(id) {
+function deleteCourse(id) {
   courses = courses.filter(c => c.id !== id);
   localStorage.setItem('tee_courses', JSON.stringify(courses));
   saveDisabled(getDisabled().filter(d => d !== id));
@@ -372,7 +342,17 @@ async function deleteCourse(id) {
 // ── Table ─────────────────────────────────────────────────────
 function getEnabledCourses() { return courses.filter(c => isCourseEnabled(c.id)); }
 
+// Build a URL for the course booking page with the selected date appended
+function buildBookingUrl(courseUrl, dateVal) {
+  if (!dateVal) return courseUrl;
+  const sep = courseUrl.includes('?') ? '&' : '?';
+  // Replace existing date param if present
+  if (courseUrl.includes('date=')) return courseUrl.replace(/date=[^&]*/i, 'date=' + dateVal);
+  return courseUrl + sep + 'date=' + dateVal;
+}
+
 function buildTable(enabled) {
+  const dateVal = document.getElementById('date-picker').value;
   document.getElementById('results-area').innerHTML = `
     <div class="table-wrap">
       <table id="tee-table">
@@ -381,7 +361,7 @@ function buildTable(enabled) {
         </tr></thead>
         <tbody>${enabled.map((c,i)=>`
           <tr id="row-${i}">
-            <td><a href="${esc(c.url)}" target="_blank" style="color:inherit;text-decoration:none">${esc(c.name)} ↗</a></td>
+            <td><a href="${esc(buildBookingUrl(c.url, dateVal))}" target="_blank" style="color:inherit;text-decoration:none">${esc(c.name)} ↗</a></td>
             ${ALL_SLOTS.map(()=>'<td></td>').join('')}
           </tr>`).join('')}
         </tbody>
@@ -404,8 +384,7 @@ function fillRow(idx, teeTimes, error) {
     const sp   = t.spots !== null ? Math.min(t.spots, 4) : 4;
     const cell = row.cells[si + 1];
     if (!cell) continue;
-    const priceStr = (t.price !== null && t.price !== undefined && !isNaN(t.price))
-      ? `-$${Math.round(t.price)}` : '';
+    const priceStr = (t.price !== null && t.price !== undefined && !isNaN(t.price)) ? `-$${Math.round(t.price)}` : '';
     cell.innerHTML = `<span class="cell-spots spots-${sp}">${sp}${priceStr}</span>`;
   }
 }
@@ -421,11 +400,14 @@ function roundToNearest10(s) {
 
 // ── Refresh ───────────────────────────────────────────────────
 let refreshing = false;
-let lastResults = []; // cache last scrape so toggling re-renders without re-scraping
+let lastResults = [];
 
 function rebuildTableFromResults() {
   const enabled = getEnabledCourses();
-  if (!enabled.length) { document.getElementById('results-area').innerHTML = '<div class="empty-state"><div class="icon">🏌️</div><h2>No courses enabled</h2><p>Toggle a course on in the sidebar.</p></div>'; return; }
+  if (!enabled.length) {
+    document.getElementById('results-area').innerHTML = '<div class="empty-state"><div class="icon">🏌️</div><h2>No courses enabled</h2><p>Toggle a course on in the sidebar.</p></div>';
+    return;
+  }
   buildTable(enabled);
   lastResults.forEach(r => {
     const i = enabled.findIndex(c => c.name === r.course);
@@ -444,32 +426,12 @@ async function startRefresh() {
   const btn = document.getElementById('refresh-btn');
   const dot = document.getElementById('status-dot');
   const txt = document.getElementById('status-text');
-  const log = document.getElementById('progress-log');
 
   btn.disabled = true;
   document.getElementById('refresh-icon').innerHTML = '<span class="spin">↻</span>';
   dot.className = 'status-dot running';
-  log.innerHTML = '';
-  log.classList.add('visible');
+  txt.textContent = `Checking ${enabled.length} course${enabled.length !== 1 ? 's' : ''}…`;
   buildTable(enabled);
-
-  const lines = {};
-  function logLine(course, status, detail) {
-    const dc = status==='done'?'done':status==='error'?'error':'scraping';
-    const lb = status==='scraping' ? `Scraping ${course}…`
-             : status==='done'     ? `${course} — ${detail} time${detail!==1?'s':''} found`
-             :                       `${course} — ${detail||'error'}`;
-    if (lines[course]) {
-      lines[course].querySelector('.log-dot').className = `log-dot ${dc}`;
-      lines[course].querySelector('span').textContent = lb;
-    } else {
-      const d = document.createElement('div');
-      d.className = 'log-line';
-      d.innerHTML = `<div class="log-dot ${dc}"></div><span>${lb}</span>`;
-      log.appendChild(d); lines[course] = d;
-    }
-    log.scrollTop = log.scrollHeight;
-  }
 
   try {
     const res    = await fetch('/api/refresh', {
@@ -480,42 +442,50 @@ async function startRefresh() {
     const reader = res.body.getReader();
     const dec    = new TextDecoder();
     let   buf    = '';
+    let   done_count = 0;
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buf += dec.decode(value, { stream:true });
+      buf += dec.decode(value, { stream: true });
       const ls = buf.split('\n'); buf = ls.pop();
       for (const line of ls) {
         if (!line.startsWith('data: ')) continue;
         const msg = JSON.parse(line.slice(6));
         if (msg.type === 'progress') {
-          logLine(msg.course, msg.status, msg.status==='done' ? msg.count : msg.error);
+          if (msg.status === 'scraping') {
+            txt.textContent = `Scraping ${msg.course}…`;
+          } else if (msg.status === 'done' || msg.status === 'error') {
+            done_count++;
+            txt.textContent = `Done ${done_count} of ${enabled.length} — ${msg.status === 'error' ? msg.course + ' failed' : msg.course + ' ✓'}`;
+          }
         } else if (msg.type === 'complete') {
-          const data = await fetch('/api/results').then(r=>r.json());
+          const data = await fetch('/api/results').then(r => r.json());
           lastResults = data.results || [];
           lastResults.forEach(r => {
             const i = enabled.findIndex(c => c.name === r.course);
             if (i !== -1) fillRow(i, r.teeTimes, r.error);
           });
           applyTimeFilter();
-          txt.textContent = `Last refreshed ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${dateVal?' for '+dateVal:' for today'}`;
+          const now = new Date();
+          txt.textContent = `Last refreshed ${now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${dateVal ? ' · ' + dateVal : ''}`;
           dot.className = 'status-dot done';
         }
       }
     }
-  } catch(e) { txt.textContent = 'Refresh failed: ' + e.message; }
+  } catch(e) {
+    txt.textContent = 'Refresh failed: ' + e.message;
+    dot.className = 'status-dot';
+  }
 
   refreshing = false;
   btn.disabled = false;
   document.getElementById('refresh-icon').textContent = '↻';
 }
 
-// ── Utils ─────────────────────────────────────────────────────
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 ['inp-name','inp-url'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') addCourse(); }));
 
-// Init
 const t = new Date();
 document.getElementById('date-picker').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
 onSliderChange();
