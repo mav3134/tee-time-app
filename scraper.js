@@ -309,11 +309,32 @@ function scrapeVisibleText(text) {
     const key = `${h}:${String(min).padStart(2,'0')} ${ampm}`;
     if (seen[key]) continue;
     seen[key] = true;
-    const ctx   = text.substring(Math.max(0, match.index - 200), match.index + 200);
+    const ctx   = text.substring(Math.max(0, match.index - 300), match.index + 300);
     const spots = extractSpots(ctx);
-    times.push({ time: key, spots });
+    const price = extractPrice(ctx);
+    times.push({ time: key, spots, price });
   }
   return times;
+}
+
+function extractPrice(ctx) {
+  // Look for dollar amounts near the tee time: $45, $45.00, 45.00, etc.
+  const patterns = [
+    /\$\s*(\d+(?:\.\d{1,2})?)/,
+    /(\d+\.\d{2})\s*(?:USD|per|\/)/i,
+    /price[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
+    /rate[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
+    /green\s*fee[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
+    /total[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
+  ];
+  for (const p of patterns) {
+    const m = ctx.match(p);
+    if (m) {
+      const n = parseFloat(m[1]);
+      if (n > 0 && n < 500) return n; // sanity check: golf prices $1-$499
+    }
+  }
+  return null;
 }
 
 function extractSpots(ctx) {
