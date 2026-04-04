@@ -275,26 +275,53 @@ function parseForeUpJson(raw) {
 
 function parseTeesnapJson(raw) {
   try {
-    const data  = JSON.parse(raw);
-    const slots = Array.isArray(data) ? data :
-                  Array.isArray(data.tee_times)  ? data.tee_times  :
-                  Array.isArray(data.teeTimes)   ? data.teeTimes   :
-                  Array.isArray(data.data)        ? data.data       : null;
+    const data = JSON.parse(raw);
+
+    // Teesnap structure: data.teeTimes.teeTimes or data.teeTimes or array
+    const slots = (
+      Array.isArray(data)                            ? data :
+      Array.isArray(data.teeTimes?.teeTimes)         ? data.teeTimes.teeTimes :
+      Array.isArray(data.teeTimes)                   ? data.teeTimes :
+      Array.isArray(data.tee_times)                  ? data.tee_times :
+      Array.isArray(data.data)                       ? data.data : null
+    );
     if (!slots || !slots.length) return null;
+
+    // Confirm Teesnap format by checking for prices array with roundType
     const sample = slots[0];
-    if (!sample || (!('teeTime' in sample) && !('tee_time' in sample) && !('time' in sample))) return null;
+    if (!sample) return null;
+    const hasTeesnapFields = Array.isArray(sample.prices) || Array.isArray(sample.teeOffSections);
+    if (!hasTeesnapFields) return null;
+
     const times = [];
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
-      const rawTime = slot.teeTime || slot.tee_time || slot.time || '';
-      const avail   = slot.$$slotAvailable ?? slot.slotAvailable ?? slot.available_spots ??
-                      slot.spots           ?? slot.maxPlayers     ?? null;
-      const price   = slot.price ?? slot.rate ?? slot.green_fee ?? slot.greenFee ?? null;
+
+      // Get time from teeOffSections[0].teeOff or teeTime field
+      const sections = slot.teeOffSections || [];
+      const rawTime  = (sections[0] && sections[0].teeOff) || slot.teeTime || slot.teeoff ||
+                       slot.time || slot.startTime || '';
+
+      // Get available spots
+      const avail = slot.availableSpots ?? slot.available_spots ?? slot.spots ??
+                    slot.maxPlayers ?? (sections[0] && sections[0].availableSpots) ?? null;
+
+      // Get 18-hole price with cart (priceWithAddOn) — fall back to price if no addOn
+      let price = null;
+      if (Array.isArray(slot.prices) && slot.prices.length > 0) {
+        const eighteen = slot.prices.find(p => p.roundType === 'EIGHTEEN_HOLE') || slot.prices[0];
+        if (eighteen) {
+          const withCart    = parseFloat(eighteen.priceWithAddOn ?? eighteen.price_with_addon ?? 0);
+          const withoutCart = parseFloat(eighteen.price ?? 0);
+          price = withCart > 0 ? withCart : (withoutCart > 0 ? withoutCart : null);
+        }
+      }
+
       const normalized = parseAnyTime(rawTime);
       if (normalized) times.push({
         time:  normalized,
         spots: avail !== null ? parseInt(avail) : null,
-        price: price !== null ? parseFloat(price) : null
+        price
       });
     }
     return times.length > 0 ? times : null;
