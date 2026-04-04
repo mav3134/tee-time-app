@@ -205,7 +205,7 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
         if (price === null && Array.isArray(slot.rates) && slot.rates.length > 0) {
           const r = slot.rates[0];
           // Log structure once so we can see exact field names
-          if (times.length === 0) console.log('  Rate object sample:', JSON.stringify(r).substring(0, 200));
+          if (times.length === 0) console.log('  Rate object sample:', JSON.stringify(r).substring(0, 500));
           price = r.price ?? r.Price ?? r.green_fee ?? r.greenFee ?? r.rate ?? r.total ?? r.green ?? null;
         }
 
