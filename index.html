@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>⛳ Tee Time Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #f5f0e8;
+    --surface:  #fffdf7;
+    --border:   #d6cfbe;
+    --green:    #2d6a4f;
+    --green-lt: #d8f3dc;
+    --yellow-lt:#fef3e2;
+    --red-lt:   #fde8e8;
+    --text:     #1a1a18;
+    --muted:    #8a8272;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'IBM Plex Sans', sans-serif;
+    --display:  'Bebas Neue', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  header {
+    background: var(--green); padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  h1 { font-family: var(--display); font-size: 36px; color: #fff; letter-spacing: 2px; line-height: 1; }
+  .tagline { font-family: var(--mono); font-size: 10px; color: #a8d5b5; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .date-wrap {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3);
+    border-radius: 4px; padding: 8px 12px;
+  }
+  .date-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; color: #a8d5b5; text-transform: uppercase; white-space: nowrap; }
+  input[type="date"] { background: transparent; border: none; color: #fff; font-family: var(--mono); font-size: 13px; outline: none; cursor: pointer; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.7); cursor: pointer; }
+  .btn-refresh {
+    background: #fff; color: var(--green); font-family: var(--display); font-size: 18px;
+    letter-spacing: 1px; border: none; padding: 10px 28px; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; transition: all 0.15s; flex-shrink: 0;
+  }
+  .btn-refresh:hover:not(:disabled) { background: #e8f5e9; transform: translateY(-1px); }
+  .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .layout { display: grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 80px); }
+
+  aside {
+    background: var(--surface); border-right: 2px solid var(--border);
+    padding: 24px 20px; display: flex; flex-direction: column; gap: 20px;
+  }
+  .section-title { font-family: var(--mono); font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .add-form { display: flex; flex-direction: column; gap: 8px; }
+  input[type="text"], input[type="url"] {
+    background: var(--bg); border: 1.5px solid var(--border); color: var(--text);
+    border-radius: 4px; padding: 9px 11px; font-family: var(--sans); font-size: 13px;
+    width: 100%; outline: none; transition: border-color 0.15s;
+  }
+  input:focus { border-color: var(--green); }
+  input::placeholder { color: var(--muted); }
+  .btn-add {
+    background: var(--green); color: #fff; font-family: var(--sans); font-weight: 600;
+    font-size: 13px; border: none; border-radius: 4px; padding: 9px; cursor: pointer; transition: background 0.15s;
+  }
+  .btn-add:hover { background: #235c42; }
+
+  /* Course list with toggles */
+  .course-list { display: flex; flex-direction: column; gap: 6px; }
+  .course-item {
+    background: var(--bg); border: 1.5px solid var(--border); border-radius: 6px;
+    padding: 9px 11px; display: flex; align-items: center; gap: 8px;
+    animation: slideIn 0.2s ease; transition: opacity 0.2s;
+  }
+  .course-item.disabled { opacity: 0.4; }
+  @keyframes slideIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+  .course-item-info { flex: 1; min-width: 0; }
+  .ci-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ci-url  { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Toggle switch */
+  .toggle { position: relative; width: 34px; height: 20px; flex-shrink: 0; cursor: pointer; }
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute; inset: 0; background: var(--border);
+    border-radius: 20px; transition: background 0.2s;
+  }
+  .toggle-track::after {
+    content: ''; position: absolute; left: 3px; top: 3px;
+    width: 14px; height: 14px; background: #fff; border-radius: 50%;
+    transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .toggle input:checked + .toggle-track { background: var(--green); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(14px); }
+
+  .btn-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 2px 4px; border-radius: 3px; transition: color 0.1s; flex-shrink: 0; }
+  .btn-remove:hover { color: #c0392b; }
+  .empty-courses { font-size: 12px; color: var(--muted); text-align: center; padding: 14px; border: 1.5px dashed var(--border); border-radius: 6px; }
+
+  main { padding: 28px 32px; display: flex; flex-direction: column; gap: 18px; overflow-x: auto; }
+
+  /* Time range slider */
+  .time-filter {
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; padding: 14px 18px;
+  }
+  .time-filter-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .time-filter-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .time-range-display { font-family: var(--mono); font-size: 13px; color: var(--green); font-weight: 500; }
+  .dual-slider { position: relative; height: 22px; padding: 0 2px; }
+  .slider-track { position: absolute; height: 4px; background: var(--border); border-radius: 2px; top: 9px; left: 2px; right: 2px; }
+  .slider-fill  { position: absolute; height: 4px; background: var(--green); border-radius: 2px; top: 9px; }
+  .dual-slider input[type="range"] {
+    position: absolute; width: calc(100% - 4px); left: 2px;
+    height: 4px; background: none; pointer-events: none;
+    -webkit-appearance: none; outline: none; top: 9px; margin: 0;
+  }
+  .dual-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: all;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--green); cursor: pointer;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    margin-top: -8px;
+  }
+  .dual-slider input[type="range"]::-webkit-slider-thumb:hover { background: #235c42; }
+
+  #status-bar { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 4px; }
+  .status-dot.running { background: #f4a261; animation: pulse 0.7s ease-in-out infinite; }
+  .status-dot.done    { background: var(--green); }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  #progress-log {
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px;
+    padding: 14px 18px; font-family: var(--mono); font-size: 12px;
+    display: none; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto;
+  }
+  #progress-log.visible { display: flex; }
+  .log-line { display: flex; align-items: center; gap: 10px; }
+  .log-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .log-dot.scraping { background: #f4a261; animation: pulse 0.8s ease-in-out infinite; }
+  .log-dot.done     { background: var(--green); }
+  .log-dot.error    { background: #e74c3c; }
+
+  .table-wrap { overflow-x: auto; border: 2px solid var(--border); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; min-width: 100%; font-size: 12px; }
+  thead th {
+    background: var(--green); color: #fff; font-family: var(--mono); font-size: 9px;
+    letter-spacing: 1px; padding: 8px 4px; white-space: nowrap; text-align: center;
+    border-right: 1px solid #235c42; position: sticky; top: 0; min-width: 62px;
+  }
+  thead th:first-child { text-align: left; padding-left: 14px; min-width: 160px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #235c42; }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover td { background: #f9f6f0; }
+  tbody td { padding: 7px 6px; text-align: center; border-right: 1px solid var(--border); vertical-align: middle; }
+  tbody td:first-child { text-align: left; padding-left: 14px; font-weight: 600; font-size: 13px; white-space: nowrap; position: sticky; left: 0; background: var(--surface); border-right: 2px solid var(--border); z-index: 1; }
+  tbody tr:hover td:first-child { background: #f9f6f0; }
+
+  .cell-spots {
+    font-family: var(--mono); font-weight: 500; font-size: 11px;
+    min-width: 44px; height: 28px; display: inline-flex; align-items: center;
+    justify-content: center; border-radius: 4px; padding: 0 5px; white-space: nowrap;
+  }
+  .spots-4, .spots-3 { background: var(--green-lt); color: var(--green); }
+  .spots-2, .spots-1 { background: var(--yellow-lt); color: #b45309; }
+  .spots-0 { background: var(--red-lt); color: #9b1c1c; }
+  .cell-error { color: #e74c3c; font-family: var(--mono); font-size: 10px; }
+
+  .empty-state { text-align: center; padding: 80px 40px; color: var(--muted); }
+  .empty-state .icon { font-size: 52px; margin-bottom: 16px; }
+  .empty-state h2 { font-family: var(--display); font-size: 28px; color: var(--text); letter-spacing: 1px; margin-bottom: 8px; }
+  .empty-state p { font-size: 13px; line-height: 1.6; max-width: 340px; margin: 0 auto; }
+
+  .legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⛳ Tee Time Finder</h1>
+    <div class="tagline">Detroit Area Golf</div>
+  </div>
+  <div class="header-right">
+    <div class="date-wrap">
+      <span class="date-label">Date</span>
+      <input type="date" id="date-picker" />
+    </div>
+    <button class="btn-refresh" id="refresh-btn" onclick="startRefresh()">
+      <span id="refresh-icon">↻</span> REFRESH
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <aside>
+    <div>
+      <p class="section-title">Add Course</p>
+      <div class="add-form">
+        <input type="text" id="inp-name" placeholder="Course name" />
+        <input type="url"  id="inp-url"  placeholder="https://booking page URL..." />
+        <button class="btn-add" onclick="addCourse()">+ Add Course</button>
+      </div>
+    </div>
+    <div>
+      <p class="section-title">Your Courses</p>
+      <div class="course-list" id="course-list"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="status-bar">
+      <span><span class="status-dot" id="status-dot"></span><span id="status-text">Add courses and hit Refresh</span></span>
+    </div>
+
+    <div class="time-filter">
+      <div class="time-filter-top">
+        <span class="time-filter-label">Time Range</span>
+        <span class="time-range-display" id="range-display">7:00 AM — 6:00 PM</span>
+      </div>
+      <div class="dual-slider">
+        <div class="slider-track"></div>
+        <div class="slider-fill" id="slider-fill"></div>
+        <input type="range" id="slider-min" min="0" max="66" value="0"  oninput="onSliderChange()" />
+        <input type="range" id="slider-max" min="0" max="66" value="66" oninput="onSliderChange()" />
+      </div>
+    </div>
+
+    <div id="progress-log"></div>
+
+    <div class="legend" id="legend" style="display:none">
+      <div class="legend-item"><div class="legend-dot" style="background:#d8f3dc"></div> 3–4 spots</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fef3e2"></div> 1–2 spots</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fde8e8"></div> Full / 0</div>
+    </div>
+
+    <div id="results-area">
+      <div class="empty-state">
+        <div class="icon">🏌️</div>
+        <h2>Ready to Find Tee Times</h2>
+        <p>Add courses in the sidebar, toggle the ones you want, set your time range, pick a date, and hit <strong>Refresh</strong>.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── All time slots 7am–6pm in 10-min steps ───────────────────
+const START_H = 6, END_H = 18;
+function getSlots() {
+  const s = [];
+  for (let h = START_H; h <= END_H; h++) {
+    for (let m = 0; m < 60; m += 10) {
+      if (h === END_H && m > 0) break;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12  = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+      s.push(`${h12}:${m === 0 ? '00' : m} ${ampm}`);
+    }
+  }
+  return s;
+}
+const ALL_SLOTS = getSlots(); // 67 slots
+
+// ── Toggle state (localStorage) ──────────────────────────────
+function getDisabled() { try { return JSON.parse(localStorage.getItem('disabled_courses') || '[]'); } catch { return []; } }
+function saveDisabled(a) { localStorage.setItem('disabled_courses', JSON.stringify(a)); }
+function isCourseEnabled(id) { return !getDisabled().includes(id); }
+function toggleCourse(id) {
+  const d = getDisabled(), i = d.indexOf(id);
+  i === -1 ? d.push(id) : d.splice(i, 1);
+  saveDisabled(d);
+  renderCourseList();
+  // If we have results, rebuild the table immediately with enabled courses only
+  if (lastResults.length > 0) rebuildTableFromResults();
+}
+
+// ── Dual slider ───────────────────────────────────────────────
+function onSliderChange() {
+  let minV = parseInt(document.getElementById('slider-min').value);
+  let maxV = parseInt(document.getElementById('slider-max').value);
+  const total = ALL_SLOTS.length - 1;
+
+  // Prevent handles crossing — enforce at least 1 slot gap
+  if (minV >= maxV) {
+    if (document.activeElement.id === 'slider-min') {
+      minV = maxV - 1;
+      document.getElementById('slider-min').value = minV;
+    } else {
+      maxV = minV + 1;
+      document.getElementById('slider-max').value = maxV;
+    }
+  }
+
+  const lp = (minV / total) * 100;
+  const rp = (maxV / total) * 100;
+  const fill = document.getElementById('slider-fill');
+  fill.style.left  = `calc(${lp}% + 2px)`;
+  fill.style.width = `calc(${rp - lp}% - 4px)`;
+
+  document.getElementById('range-display').textContent = `${ALL_SLOTS[minV]} — ${ALL_SLOTS[maxV]}`;
+  applyTimeFilter();
+}
+
+function applyTimeFilter() {
+  const minV  = parseInt(document.getElementById('slider-min').value);
+  const maxV  = parseInt(document.getElementById('slider-max').value);
+  const table = document.getElementById('tee-table');
+  if (!table) return;
+  table.querySelectorAll('tr').forEach(row => {
+    for (let i = 0; i < ALL_SLOTS.length; i++) {
+      const cell = row.cells[i + 1];
+      if (cell) cell.style.display = (i >= minV && i <= maxV) ? '' : 'none';
+    }
+  });
+}
+
+// ── Courses (stored in localStorage) ─────────────────────────
+let courses = [];
+
+function loadCourses() {
+  try { courses = JSON.parse(localStorage.getItem('tee_courses') || '[]'); }
+  catch { courses = []; }
+  renderCourseList();
+}
+
+function renderCourseList() {
+  const el = document.getElementById('course-list');
+  if (!courses.length) { el.innerHTML = '<div class="empty-courses">No courses yet.</div>'; return; }
+  el.innerHTML = courses.map(c => {
+    const on = isCourseEnabled(c.id);
+    return `<div class="course-item ${on ? '' : 'disabled'}">
+      <div class="course-item-info">
+        <div class="ci-name">${esc(c.name)}</div>
+        <div class="ci-url">${esc(c.url)}</div>
+      </div>
+      <label class="toggle" title="${on ? 'Click to disable' : 'Click to enable'}">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleCourse(${c.id})" />
+        <span class="toggle-track"></span>
+      </label>
+      <button class="btn-remove" onclick="deleteCourse(${c.id})" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function addCourse() {
+  const name = document.getElementById('inp-name').value.trim();
+  const url  = document.getElementById('inp-url').value.trim();
+  if (!name || !url) { alert('Please enter both a name and URL.'); return; }
+  const c = { id: Date.now(), name, url };
+  courses.push(c);
+  localStorage.setItem('tee_courses', JSON.stringify(courses));
+  renderCourseList();
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-url').value  = '';
+}
+
+async function deleteCourse(id) {
+  courses = courses.filter(c => c.id !== id);
+  localStorage.setItem('tee_courses', JSON.stringify(courses));
+  saveDisabled(getDisabled().filter(d => d !== id));
+  renderCourseList();
+}
+
+// ── Table ─────────────────────────────────────────────────────
+function getEnabledCourses() { return courses.filter(c => isCourseEnabled(c.id)); }
+
+function buildTable(enabled) {
+  document.getElementById('results-area').innerHTML = `
+    <div class="table-wrap">
+      <table id="tee-table">
+        <thead><tr>
+          <th>COURSE</th>${ALL_SLOTS.map(s=>`<th>${s}</th>`).join('')}
+        </tr></thead>
+        <tbody>${enabled.map((c,i)=>`
+          <tr id="row-${i}">
+            <td><a href="${esc(c.url)}" target="_blank" style="color:inherit;text-decoration:none">${esc(c.name)} ↗</a></td>
+            ${ALL_SLOTS.map(()=>'<td></td>').join('')}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('legend').style.display = 'flex';
+  applyTimeFilter();
+}
+
+function fillRow(idx, teeTimes, error) {
+  const row = document.getElementById(`row-${idx}`);
+  if (!row) return;
+  if (error) { row.cells[1].innerHTML = `<span class="cell-error" title="${esc(error)}">${esc(error.substring(0,60))}</span>`; return; }
+  if (!teeTimes || !teeTimes.length) { row.cells[1].innerHTML = `<span style="color:var(--muted);font-size:11px;font-family:var(--mono)">— no times found</span>`; return; }
+  for (const t of teeTimes) {
+    const r  = roundToNearest10(t.time);
+    if (!r) continue;
+    const si = ALL_SLOTS.indexOf(r);
+    if (si === -1) continue;
+    const sp   = t.spots !== null ? Math.min(t.spots, 4) : 4;
+    const cell = row.cells[si + 1];
+    if (!cell) continue;
+    const priceStr = (t.price !== null && t.price !== undefined && !isNaN(t.price))
+      ? `-$${Math.round(t.price)}` : '';
+    cell.innerHTML = `<span class="cell-spots spots-${sp}">${sp}${priceStr}</span>`;
+  }
+}
+
+function roundToNearest10(s) {
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return null;
+  let h = parseInt(m[1]), min = parseInt(m[2]), ap = m[3].toUpperCase();
+  let r = Math.round(min / 10) * 10;
+  if (r === 60) { r = 0; h++; if (h===13) h=1; if (h===12 && ap==='AM') ap='PM'; }
+  return `${h}:${r===0?'00':r} ${ap}`;
+}
+
+// ── Refresh ───────────────────────────────────────────────────
+let refreshing = false;
+let lastResults = []; // cache last scrape so toggling re-renders without re-scraping
+
+function rebuildTableFromResults() {
+  const enabled = getEnabledCourses();
+  if (!enabled.length) { document.getElementById('results-area').innerHTML = '<div class="empty-state"><div class="icon">🏌️</div><h2>No courses enabled</h2><p>Toggle a course on in the sidebar.</p></div>'; return; }
+  buildTable(enabled);
+  lastResults.forEach(r => {
+    const i = enabled.findIndex(c => c.name === r.course);
+    if (i !== -1) fillRow(i, r.teeTimes, r.error);
+  });
+  applyTimeFilter();
+}
+
+async function startRefresh() {
+  const enabled = getEnabledCourses();
+  if (refreshing) return;
+  if (!enabled.length) { alert('No courses are enabled. Toggle at least one on.'); return; }
+
+  refreshing = true;
+  const dateVal = document.getElementById('date-picker').value;
+  const btn = document.getElementById('refresh-btn');
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  const log = document.getElementById('progress-log');
+
+  btn.disabled = true;
+  document.getElementById('refresh-icon').innerHTML = '<span class="spin">↻</span>';
+  dot.className = 'status-dot running';
+  log.innerHTML = '';
+  log.classList.add('visible');
+  buildTable(enabled);
+
+  const lines = {};
+  function logLine(course, status, detail) {
+    const dc = status==='done'?'done':status==='error'?'error':'scraping';
+    const lb = status==='scraping' ? `Scraping ${course}…`
+             : status==='done'     ? `${course} — ${detail} time${detail!==1?'s':''} found`
+             :                       `${course} — ${detail||'error'}`;
+    if (lines[course]) {
+      lines[course].querySelector('.log-dot').className = `log-dot ${dc}`;
+      lines[course].querySelector('span').textContent = lb;
+    } else {
+      const d = document.createElement('div');
+      d.className = 'log-line';
+      d.innerHTML = `<div class="log-dot ${dc}"></div><span>${lb}</span>`;
+      log.appendChild(d); lines[course] = d;
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  try {
+    const res    = await fetch('/api/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: dateVal, courses: enabled })
+    });
+    const reader = res.body.getReader();
+    const dec    = new TextDecoder();
+    let   buf    = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream:true });
+      const ls = buf.split('\n'); buf = ls.pop();
+      for (const line of ls) {
+        if (!line.startsWith('data: ')) continue;
+        const msg = JSON.parse(line.slice(6));
+        if (msg.type === 'progress') {
+          logLine(msg.course, msg.status, msg.status==='done' ? msg.count : msg.error);
+        } else if (msg.type === 'complete') {
+          const data = await fetch('/api/results').then(r=>r.json());
+          lastResults = data.results || [];
+          lastResults.forEach(r => {
+            const i = enabled.findIndex(c => c.name === r.course);
+            if (i !== -1) fillRow(i, r.teeTimes, r.error);
+          });
+          applyTimeFilter();
+          txt.textContent = `Last refreshed ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${dateVal?' for '+dateVal:' for today'}`;
+          dot.className = 'status-dot done';
+        }
+      }
+    }
+  } catch(e) { txt.textContent = 'Refresh failed: ' + e.message; }
+
+  refreshing = false;
+  btn.disabled = false;
+  document.getElementById('refresh-icon').textContent = '↻';
+}
+
+// ── Utils ─────────────────────────────────────────────────────
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+['inp-name','inp-url'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') addCourse(); }));
+
+// Init
+const t = new Date();
+document.getElementById('date-picker').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+onSliderChange();
+loadCourses();
+</script>
+</body>
+</html>
