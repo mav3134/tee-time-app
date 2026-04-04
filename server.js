@@ -16,6 +16,10 @@ if (!fs.existsSync(COURSES_FILE)) fs.writeFileSync(COURSES_FILE, '[]');
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // ── Helpers ───────────────────────────────────────────────────
 
 function readCourses()         { return JSON.parse(fs.readFileSync(COURSES_FILE, 'utf8')); }
