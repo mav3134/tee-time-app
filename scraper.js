@@ -232,34 +232,46 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
 function parseForeUpJson(raw) {
   try {
     const data = JSON.parse(raw);
-    // foreUP returns array directly or under a key
     const slots = Array.isArray(data) ? data :
                   Array.isArray(data.data) ? data.data :
-                  Array.isArray(data.tee_times) ? data.tee_times :
-                  Array.isArray(data.teeTimes) ? data.teeTimes : null;
+                  Array.isArray(data.tee_times) ? data.tee_times : null;
     if (!slots || !slots.length) return null;
 
-    // Check if it looks like foreUP data (has time field in foreUP format)
+    // Confirm it looks like foreUP by checking for known fields
     const sample = slots[0];
-    if (!sample) return null;
-    const hasForeUpFields = 'time' in sample || 'tee_time' in sample || 'teetime' in sample ||
-                            'green_fee' in sample || 'available_spots' in sample;
-    if (!hasForeUpFields) return null;
+    if (!sample || (!('time' in sample) && !('tee_time' in sample))) return null;
 
     const times = [];
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
-      const rawTime = slot.time || slot.tee_time || slot.teetime || slot.Time || '';
-      const avail   = slot.available_spots ?? slot.availableSpots ?? slot.spots ??
-                      slot.max_players ?? slot.maxPlayers ?? null;
-      // Find highest price (18 holes)
-      let price = null;
-      const prices = [slot.green_fee, slot.greenFee, slot.price, slot.Price,
-                      slot.rate, slot.Rate, slot.total, slot.Total].filter(p => p !== null && p !== undefined);
-      if (prices.length > 0) price = Math.max(...prices.map(p => parseFloat(p)));
 
-      const normalized = parseAnyTime(rawTime);
-      if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price: price !== null && !isNaN(price) ? price : null });
+      // foreUP time format: "2026-04-07 08:33"
+      const rawTime = slot.time || slot.tee_time || slot.teetime || '';
+      const avail   = slot.available_spots ?? slot.availableSpots ?? slot.spots ??
+                      slot.max_players     ?? slot.maxPlayers     ?? null;
+
+      // Collect all prices and return highest (= 18 holes)
+      const priceFields = [slot.green_fee, slot.greenFee, slot.price, slot.Price,
+                           slot.rate, slot.total, slot.walk_rate, slot.ride_rate]
+        .filter(p => p !== null && p !== undefined && p !== false)
+        .map(p => parseFloat(p))
+        .filter(p => !isNaN(p) && p > 0 && p < 500);
+      const price = priceFields.length > 0 ? Math.max(...priceFields) : null;
+
+      // Parse "2026-04-07 08:33" format
+      let normalized = null;
+      const dtMatch = String(rawTime).match(/\d{4}-\d{2}-\d{2}\s+(\d{1,2}):(\d{2})/);
+      if (dtMatch) {
+        let h = parseInt(dtMatch[1]);
+        const min  = dtMatch[2];
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12  = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+        if (h >= START_H && h <= END_H) normalized = `${h12}:${min} ${ampm}`;
+      } else {
+        normalized = parseAnyTime(rawTime);
+      }
+
+      if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price });
     }
     return times.length > 0 ? times : null;
   } catch { return null; }
