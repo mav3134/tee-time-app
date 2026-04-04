@@ -13,11 +13,15 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const interceptedResponses = [];
   let apiRequestHeaders = null;
   let apiBaseUrl        = null;
-  const isClubCaddieDirectUrl = /clubcaddie\.com.*\/slots/i.test(course.url);
 
   page.on('request', (request) => {
     const url = request.url();
     if (url.includes('kenna.io/v2/tee-times')) {
+      apiRequestHeaders = request.headers();
+      apiBaseUrl        = url;
+    }
+    // Capture ClubCaddie internal slot API calls
+    if (url.includes('clubcaddie.com') && url.includes('/slots') && url.includes('Interaction=')) {
       apiRequestHeaders = request.headers();
       apiBaseUrl        = url;
     }
@@ -27,12 +31,16 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     try {
       const contentType = response.headers()['content-type'] || '';
       if (response.status() !== 200) return;
-      if (!contentType.includes('json')) return;
       const url = response.url();
       if (/google|facebook|analytics|gtm|pixel|ads|doubleclick/i.test(url)) return;
+      // Capture JSON AND plain text responses from booking APIs
+      if (!contentType.includes('json') && !contentType.includes('text/plain') && !contentType.includes('text/html')) return;
       const text = await response.text();
       if (!text || text.length < 30) return;
-      if (/\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
+      // Only keep if it looks like slot/tee time data
+      if (url.includes('clubcaddie.com') && url.includes('/slots')) {
+        interceptedResponses.push({ url, text });
+      } else if (contentType.includes('json') && /\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
         interceptedResponses.push({ url, text });
       }
     } catch { /* ignore */ }
@@ -41,23 +49,13 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   try {
     const fetchUrl = buildUrl(course.url, dateStr);
     await page.goto(fetchUrl, { waitUntil: 'load', timeout: 45000 });
-    await page.waitForTimeout(isClubCaddieDirectUrl ? 3000 : 6000);
+    await page.waitForTimeout(6000);
 
-    // For ClubCaddie direct API URLs, parse the page body as JSON directly
-    if (isClubCaddieDirectUrl) {
-      const bodyText = await page.evaluate(() => document.body.innerText);
-      console.log(`  [${course.name}] ClubCaddie body preview: ${bodyText.substring(0, 300)}`);
-      const ccTimes = parseClubCaddieSlots(bodyText);
-      if (ccTimes !== null && ccTimes.length > 0) {
-        console.log(`  [${course.name}] ✓ Found ${ccTimes.length} times (ClubCaddie body)`);
-        await browser.close();
-        return ccTimes;
-      }
-      // Fall back to text scrape if JSON parse fails
-      const textTimes = scrapeVisibleText(bodyText);
-      console.log(`  [${course.name}] Text scrape found ${textTimes.length} times`);
-      await browser.close();
-      return textTimes;
+    // Log what we intercepted for debugging
+    console.log(`  [${course.name}] Intercepted ${interceptedResponses.length} responses`);
+    for (const r of interceptedResponses) {
+      console.log(`  [${course.name}] Response from: ${r.url.substring(0, 100)}`);
+      console.log(`  [${course.name}] Preview: ${r.text.substring(0, 200)}`);
     }
 
     const facilityMap = {};
@@ -72,9 +70,10 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
+    // Re-fire captured API with correct date
     if (apiBaseUrl && dateStr) {
       const correctedUrl = buildUrl(apiBaseUrl, dateStr);
-      console.log(`  [${course.name}] Re-firing API with date ${dateStr}: ${correctedUrl.substring(0, 120)}`);
+      console.log(`  [${course.name}] Re-firing API: ${correctedUrl.substring(0, 120)}`);
       try {
         const response = await context.request.fetch(correctedUrl, {
           headers: apiRequestHeaders || {}
@@ -87,12 +86,17 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
             console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`);
             await browser.close(); return kennaTimes;
           }
+          const ccTimes = parseClubCaddieSlots(refiredText);
+          if (ccTimes !== null && ccTimes.length > 0) {
+            console.log(`  [${course.name}] ✓ Found ${ccTimes.length} times (ClubCaddie)`);
+            await browser.close(); return ccTimes;
+          }
           const genericTimes = parseGenericJson(refiredText, filterByName ? course.name : null);
           if (genericTimes !== null && genericTimes.length > 0) {
             console.log(`  [${course.name}] ✓ Found ${genericTimes.length} times (generic)`);
             await browser.close(); return genericTimes;
           }
-          console.log(`  [${course.name}] Parsed 0 times from re-fired response`);
+          console.log(`  [${course.name}] Parsed 0 from re-fire`);
         } else {
           console.log(`  [${course.name}] Re-fire HTTP ${response.status()}`);
         }
@@ -101,14 +105,18 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
+    // Try all intercepted responses
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
       if (kennaTimes !== null && kennaTimes.length > 0) { await browser.close(); return kennaTimes; }
+      const ccTimes = parseClubCaddieSlots(r.text);
+      if (ccTimes !== null && ccTimes.length > 0) { await browser.close(); return ccTimes; }
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
 
+    // Last resort: text scrape
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
     console.log(`  [${course.name}] Text scrape found ${teeTimes.length} times`);
     await browser.close();
