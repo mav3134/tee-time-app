@@ -13,7 +13,8 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const interceptedResponses = [];
   let apiRequestHeaders = null;
   let apiBaseUrl        = null;
-  const isForeUp = /foreupsoftware\.com/i.test(course.url);
+  const isForeUp   = /foreupsoftware\.com/i.test(course.url);
+  const isTeesnap  = /teesnap\.net/i.test(course.url);
 
   page.on('request', (request) => {
     const url = request.url();
@@ -22,6 +23,10 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       apiBaseUrl        = url;
     }
     if (url.includes('foreupsoftware.com') && url.includes('/api/booking/times')) {
+      apiRequestHeaders = request.headers();
+      apiBaseUrl        = url;
+    }
+    if (url.includes('teesnap.net') && (url.includes('/tee-times') || url.includes('/teetimes') || url.includes('/api/'))) {
       apiRequestHeaders = request.headers();
       apiBaseUrl        = url;
     }
@@ -36,8 +41,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (!contentType.includes('json') && !contentType.includes('text/plain')) return;
       const text = await response.text();
       if (!text || text.length < 30) return;
-      // Always capture foreUP responses
-      if (url.includes('foreupsoftware.com')) {
+      if (url.includes('foreupsoftware.com') || url.includes('teesnap.net')) {
         interceptedResponses.push({ url, text });
       } else if (/\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
         interceptedResponses.push({ url, text });
@@ -49,13 +53,11 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     const fetchUrl = buildUrl(course.url, dateStr);
     await page.goto(fetchUrl, { waitUntil: 'load', timeout: 45000 });
 
-    // foreUP is a heavy React app — needs more time
-    const waitMs = isForeUp ? 10000 : 6000;
+    const waitMs = (isForeUp || isTeesnap) ? 10000 : 6000;
     await page.waitForTimeout(waitMs);
 
     console.log(`  [${course.name}] Intercepted ${interceptedResponses.length} responses`);
 
-    // Build facility map for Kenna
     const facilityMap = {};
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities')) {
@@ -68,7 +70,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
-    // Re-fire captured API with correct date
     if (apiBaseUrl && dateStr) {
       const correctedUrl = buildApiUrl(apiBaseUrl, dateStr, isForeUp);
       console.log(`  [${course.name}] Re-firing API: ${correctedUrl.substring(0, 120)}`);
@@ -89,6 +90,11 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
             console.log(`  [${course.name}] ✓ Found ${foreUpTimes.length} times (foreUP)`);
             await browser.close(); return foreUpTimes;
           }
+          const teesnapTimes = parseTeesnapJson(refiredText);
+          if (teesnapTimes !== null && teesnapTimes.length > 0) {
+            console.log(`  [${course.name}] ✓ Found ${teesnapTimes.length} times (Teesnap)`);
+            await browser.close(); return teesnapTimes;
+          }
           const genericTimes = parseGenericJson(refiredText, filterByName ? course.name : null);
           if (genericTimes !== null && genericTimes.length > 0) {
             console.log(`  [${course.name}] ✓ Found ${genericTimes.length} times (generic)`);
@@ -103,20 +109,20 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
-    // Try all intercepted responses
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
-      console.log(`  [${course.name}] Trying intercepted: ${r.url.substring(0, 80)}`);
+      console.log(`  [${course.name}] Trying: ${r.url.substring(0, 80)}`);
       console.log(`  [${course.name}] Preview: ${r.text.substring(0, 200)}`);
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
       if (kennaTimes !== null && kennaTimes.length > 0) { await browser.close(); return kennaTimes; }
       const foreUpTimes = parseForeUpJson(r.text);
       if (foreUpTimes !== null && foreUpTimes.length > 0) { await browser.close(); return foreUpTimes; }
+      const teesnapTimes = parseTeesnapJson(r.text);
+      if (teesnapTimes !== null && teesnapTimes.length > 0) { await browser.close(); return teesnapTimes; }
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
 
-    // Last resort: text scrape
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
     console.log(`  [${course.name}] Text scrape found ${teeTimes.length} times`);
     await browser.close();
@@ -138,19 +144,24 @@ function buildUrl(url, dateStr) {
   }
   if (/foreup/i.test(url)) {
     const [y, m, d] = dateStr.split('-');
-    const fDate = `${m}-${d}-${y}`;
-    // Strip hash, add date param before hash
+    const fDate   = `${m}-${d}-${y}`;
     const hashIdx = url.indexOf('#');
     const base    = hashIdx !== -1 ? url.substring(0, hashIdx) : url;
     const hash    = hashIdx !== -1 ? url.substring(hashIdx) : '';
     if (base.includes('date=')) return base.replace(/date=[^&]*/i, 'date=' + fDate) + hash;
     return base + (base.includes('?') ? '&' : '?') + 'date=' + fDate + hash;
   }
+  if (/teesnap\.net/i.test(url)) {
+    if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + dateStr);
+    const hashIdx = url.indexOf('#');
+    const base    = hashIdx !== -1 ? url.substring(0, hashIdx) : url;
+    const hash    = hashIdx !== -1 ? url.substring(hashIdx) : '';
+    return base + (base.includes('?') ? '&' : '?') + 'date=' + dateStr + hash;
+  }
   if (!url.includes('date=')) return url + (url.includes('?') ? '&' : '?') + 'date=' + dateStr;
   return url.replace(/date=[^&]*/i, 'date=' + dateStr);
 }
 
-// For re-firing API calls with a corrected date
 function buildApiUrl(url, dateStr, isForeUp) {
   if (isForeUp) {
     const [y, m, d] = dateStr.split('-');
@@ -158,7 +169,6 @@ function buildApiUrl(url, dateStr, isForeUp) {
     if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + fDate);
     return url + (url.includes('?') ? '&' : '?') + 'date=' + fDate;
   }
-  // Kenna uses YYYY-MM-DD
   if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + dateStr);
   return url + (url.includes('?') ? '&' : '?') + 'date=' + dateStr;
 }
@@ -228,40 +238,28 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
   } catch { return null; }
 }
 
-// foreUP API returns array of tee time objects
 function parseForeUpJson(raw) {
   try {
-    const data = JSON.parse(raw);
+    const data  = JSON.parse(raw);
     const slots = Array.isArray(data) ? data :
                   Array.isArray(data.data) ? data.data :
                   Array.isArray(data.tee_times) ? data.tee_times : null;
     if (!slots || !slots.length) return null;
-
-    // Confirm it looks like foreUP by checking for known fields
     const sample = slots[0];
     if (!sample || (!('time' in sample) && !('tee_time' in sample))) return null;
-
     const times = [];
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
-
-      // foreUP time format: "2026-04-07 08:33"
-      const rawTime = slot.time || slot.tee_time || slot.teetime || '';
-      const avail   = slot.available_spots ?? slot.availableSpots ?? slot.spots ??
-                      slot.max_players     ?? slot.maxPlayers     ?? null;
-
-      // Collect all prices and return highest (= 18 holes)
-     // foreUP splits green fee + cart fee — add them for total price
+      const rawTime  = slot.time || slot.tee_time || slot.teetime || '';
+      const avail    = slot.available_spots ?? slot.availableSpots ?? slot.spots ?? slot.max_players ?? slot.maxPlayers ?? null;
       const greenFee = parseFloat(slot.green_fee ?? slot.greenFee ?? slot.price ?? 0) || 0;
       const cartFee  = parseFloat(slot.cart_fee  ?? slot.cartFee  ?? slot.ride_rate ?? 0) || 0;
       const total    = greenFee + cartFee;
       const price    = total > 0 ? total : null;
-
-      // Parse "2026-04-07 08:33" format
       let normalized = null;
-      const dtMatch = String(rawTime).match(/\d{4}-\d{2}-\d{2}\s+(\d{1,2}):(\d{2})/);
+      const dtMatch  = String(rawTime).match(/\d{4}-\d{2}-\d{2}\s+(\d{1,2}):(\d{2})/);
       if (dtMatch) {
-        let h = parseInt(dtMatch[1]);
+        const h    = parseInt(dtMatch[1]);
         const min  = dtMatch[2];
         const ampm = h >= 12 ? 'PM' : 'AM';
         const h12  = h > 12 ? h - 12 : (h === 0 ? 12 : h);
@@ -269,8 +267,35 @@ function parseForeUpJson(raw) {
       } else {
         normalized = parseAnyTime(rawTime);
       }
-
       if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price });
+    }
+    return times.length > 0 ? times : null;
+  } catch { return null; }
+}
+
+function parseTeesnapJson(raw) {
+  try {
+    const data  = JSON.parse(raw);
+    const slots = Array.isArray(data) ? data :
+                  Array.isArray(data.tee_times)  ? data.tee_times  :
+                  Array.isArray(data.teeTimes)   ? data.teeTimes   :
+                  Array.isArray(data.data)        ? data.data       : null;
+    if (!slots || !slots.length) return null;
+    const sample = slots[0];
+    if (!sample || (!('teeTime' in sample) && !('tee_time' in sample) && !('time' in sample))) return null;
+    const times = [];
+    for (const slot of slots) {
+      if (typeof slot !== 'object' || !slot) continue;
+      const rawTime = slot.teeTime || slot.tee_time || slot.time || '';
+      const avail   = slot.$$slotAvailable ?? slot.slotAvailable ?? slot.available_spots ??
+                      slot.spots           ?? slot.maxPlayers     ?? null;
+      const price   = slot.price ?? slot.rate ?? slot.green_fee ?? slot.greenFee ?? null;
+      const normalized = parseAnyTime(rawTime);
+      if (normalized) times.push({
+        time:  normalized,
+        spots: avail !== null ? parseInt(avail) : null,
+        price: price !== null ? parseFloat(price) : null
+      });
     }
     return times.length > 0 ? times : null;
   } catch { return null; }
