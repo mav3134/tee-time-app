@@ -1,15 +1,16 @@
-FROM mcr.microsoft.com/playwright:v1.44.0-jammy
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm install
-
-COPY . .
-
-ENV PORT=3000
-ENV NODE_ENV=production
-
-EXPOSE 3000
-
-CMD ["node", "server.js"]
+{
+  "name": "tee-time-app",
+  "version": "1.0.0",
+  "description": "Detroit area golf tee time aggregator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "playwright": "^1.59.1"
+  }
+}
