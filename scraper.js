@@ -253,12 +253,14 @@ function parseGenericJson(raw, courseName) {
 function parseAnyTime(rawTime) {
   if (!rawTime) return null;
   const t = String(rawTime).trim();
-  if (t.includes('T') && t.includes('-')) {
+if (t.includes('T') && t.includes('-')) {
     try {
-      const d    = new Date(t);
+      const d = new Date(t);
       if (isNaN(d)) return null;
-      let h      = d.getHours();
-      const m    = d.getMinutes();
+      // Convert UTC to Eastern Time (Detroit) — Railway server runs in UTC
+      const eastern = new Date(d.toLocaleString('en-US', { timeZone: 'America/Detroit' }));
+      let h      = eastern.getHours();
+      const m    = eastern.getMinutes();
       const ampm = h >= 12 ? 'PM' : 'AM';
       const h12  = h > 12 ? h - 12 : (h === 0 ? 12 : h);
       if (h < START_H || h > END_H) return null;
