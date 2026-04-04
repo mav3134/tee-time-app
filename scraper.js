@@ -318,23 +318,23 @@ function scrapeVisibleText(text) {
 }
 
 function extractPrice(ctx) {
-  // Look for dollar amounts near the tee time: $45, $45.00, 45.00, etc.
   const patterns = [
-    /\$\s*(\d+(?:\.\d{1,2})?)/,
-    /(\d+\.\d{2})\s*(?:USD|per|\/)/i,
-    /price[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
-    /rate[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
-    /green\s*fee[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
-    /total[:\s]+\$?(\d+(?:\.\d{1,2})?)/i,
+    /\$\s*(\d+(?:\.\d{1,2})?)/g,
+    /(\d+\.\d{2})\s*(?:USD|per|\/)/gi,
+    /price[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
+    /rate[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
+    /green\s*fee[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
+    /total[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
   ];
+  let highest = null;
   for (const p of patterns) {
-    const m = ctx.match(p);
-    if (m) {
+    let m;
+    while ((m = p.exec(ctx)) !== null) {
       const n = parseFloat(m[1]);
-      if (n > 0 && n < 500) return n; // sanity check: golf prices $1-$499
+      if (n > 0 && n < 500 && (highest === null || n > highest)) highest = n;
     }
   }
-  return null;
+  return highest;
 }
 
 function extractSpots(ctx) {
