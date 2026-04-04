@@ -14,7 +14,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   let kennaRequestHeaders = null;
   let kennaBaseUrl        = null;
 
-  // Capture request headers so we can re-fire with correct date
   page.on('request', (request) => {
     if (request.url().includes('kenna.io/v2/tee-times')) {
       kennaRequestHeaders = request.headers();
@@ -42,7 +41,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     await page.goto(fetchUrl, { waitUntil: 'load', timeout: 45000 });
     await page.waitForTimeout(6000);
 
-    // Build facility map: courseId -> name
     const facilityMap = {};
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities')) {
@@ -55,12 +53,10 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
-    // If we captured a Kenna request and have a target date, re-fire with correct date
     if (kennaBaseUrl && dateStr) {
       const correctedUrl = kennaBaseUrl.replace(/date=[^&]*/i, 'date=' + dateStr);
       console.log(`  [${course.name}] Re-firing Kenna with date ${dateStr}: ${correctedUrl.substring(0, 120)}`);
       try {
-        // Use Playwright's context.request — runs from Node.js side, no CORS restrictions
         const response = await context.request.fetch(correctedUrl, {
           headers: kennaRequestHeaders || {}
         });
@@ -88,7 +84,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
-    // Try all intercepted responses
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
@@ -101,7 +96,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
-    // Last resort: text scrape
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
     console.log(`  [${course.name}] Text scrape found ${teeTimes.length} times`);
     await browser.close();
@@ -115,21 +109,18 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
 
 function buildUrl(url, dateStr) {
   if (!dateStr) return url;
-
   if (/clubcaddie\.com/i.test(url)) {
     const [y, m, d] = dateStr.split('-');
     const slashDate = `${m}/${d}/${y}`;
     if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + encodeURIComponent(slashDate));
     return url + (url.includes('?') ? '&' : '?') + 'date=' + encodeURIComponent(slashDate);
   }
-
   if (/foreup/i.test(url)) {
     const [y, m, d] = dateStr.split('-');
     const fDate = `${m}-${d}-${y}`;
     if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + fDate);
     return url + (url.includes('?') ? '&' : '?') + 'date=' + fDate;
   }
-
   if (!url.includes('date=')) return url + (url.includes('?') ? '&' : '?') + 'date=' + dateStr;
   return url.replace(/date=[^&]*/i, 'date=' + dateStr);
 }
@@ -149,11 +140,9 @@ function extractCourseSection(text, courseName) {
   const textLower = text.toLowerCase();
   const startIdx  = textLower.indexOf(nameLower);
   if (startIdx === -1) return text;
-
   const chunk  = text.substring(startIdx, startIdx + 8000);
   const lines  = chunk.split('\n');
   const result = [lines[0]];
-
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     const hasTimes = result.join('\n').match(/\d{1,2}:\d{2}\s*(AM|PM)/i);
@@ -168,10 +157,6 @@ function extractCourseSection(text, courseName) {
   return result.join('\n');
 }
 
-/**
- * Parse Kenna/TeeItUp API format.
- * Top-level: [{courseId, teetimes:[{teetime:"ISO", maxPlayers, ...}], ...}]
- */
 function parseKennaJson(raw, courseName, facilityMap, filterByName) {
   try {
     const data = JSON.parse(raw);
@@ -179,7 +164,6 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
     if (!data[0] || (!('teetimes' in data[0]) && !('teeTimes' in data[0]))) return null;
 
     const times = [];
-
     for (const courseBlock of data) {
       const slots = courseBlock.teetimes || courseBlock.teeTimes || [];
       if (!Array.isArray(slots)) continue;
@@ -199,14 +183,12 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
         const avail   = slot.maxPlayers ?? slot.MaxPlayers ?? slot.openSlots ??
                         slot.available  ?? slot.Available  ?? null;
 
-        // Kenna stores price in a rates array: rates:[{price, name, ...}]
-        let price = slot.price ?? slot.Price ?? slot.rate ?? slot.Rate ??
-                    slot.greenFee ?? slot.green_fee ?? slot.cost ?? null;
+        // greenFeeCart is in cents (4500 = $45)
+        let price = slot.price ?? slot.Price ?? slot.rate ?? slot.Rate ?? null;
         if (price === null && Array.isArray(slot.rates) && slot.rates.length > 0) {
-          const r = slot.rates[0];
-          // Log structure once so we can see exact field names
-          if (times.length === 0) console.log('  Rate object sample:', JSON.stringify(r).substring(0, 500));
-          price = r.price ?? r.Price ?? r.green_fee ?? r.greenFee ?? r.rate ?? r.total ?? r.green ?? null;
+          const r   = slot.rates[0];
+          const raw = r.greenFeeCart ?? r.greenFee ?? r.price ?? r.Price ?? r.rate ?? r.total ?? null;
+          if (raw !== null) price = (r.greenFeeCart !== undefined) ? raw / 100 : raw;
         }
 
         const normalized = parseAnyTime(rawTime);
@@ -219,16 +201,12 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
         }
       }
     }
-
     return times.length > 0 ? times : null;
   } catch {
     return null;
   }
 }
 
-/**
- * Generic JSON parser for other booking systems.
- */
 function parseGenericJson(raw, courseName) {
   try {
     const data  = JSON.parse(raw);
@@ -275,13 +253,10 @@ function parseGenericJson(raw, courseName) {
 function parseAnyTime(rawTime) {
   if (!rawTime) return null;
   const t = String(rawTime).trim();
-
-  // ISO datetime: "2026-04-07T13:00:00.000Z"
   if (t.includes('T') && t.includes('-')) {
     try {
       const d    = new Date(t);
       if (isNaN(d)) return null;
-      // Use local time (server is running in user's timezone)
       let h      = d.getHours();
       const m    = d.getMinutes();
       const ampm = h >= 12 ? 'PM' : 'AM';
@@ -290,12 +265,8 @@ function parseAnyTime(rawTime) {
       return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
     } catch { return null; }
   }
-
-  // Plain "H:MM AM/PM"
   let m = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (m) return `${parseInt(m[1])}:${m[2]} ${m[3].toUpperCase()}`;
-
-  // 24-hour "HH:MM"
   m = t.match(/^(\d{1,2}):(\d{2})$/);
   if (m) {
     let h      = parseInt(m[1]);
@@ -304,7 +275,6 @@ function parseAnyTime(rawTime) {
     if (h === 0) h = 12;
     return `${h}:${m[2]} ${ampm}`;
   }
-
   return null;
 }
 
@@ -339,8 +309,6 @@ function extractSpots(ctx) {
   return null;
 }
 
-function normalizeTime(t) {
-  return parseAnyTime(t);
-}
+function normalizeTime(t) { return parseAnyTime(t); }
 
 module.exports = { scrapeCourse };
