@@ -14,16 +14,7 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/debug', (req, res) => {
-  const publicPath = path.join(__dirname, 'public');
-  const exists     = fs.existsSync(publicPath);
-  const files      = exists ? fs.readdirSync(publicPath) : [];
-  res.json({ __dirname, publicPath, exists, files });
-});
+// ── Results ───────────────────────────────────────────────────
 
 let cachedResults = { results: [], lastRefresh: null };
 
@@ -43,6 +34,9 @@ function saveResults(data) {
 cachedResults = readResults();
 
 app.get('/api/results', (req, res) => res.json(cachedResults));
+
+// ── Refresh ───────────────────────────────────────────────────
+// Courses are passed from the browser (stored in localStorage there)
 
 app.post('/api/refresh', async (req, res) => {
   const { date = '', courses = [] } = req.body;
