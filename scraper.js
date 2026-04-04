@@ -11,13 +11,14 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const page = await context.newPage();
 
   const interceptedResponses = [];
-  let kennaRequestHeaders = null;
-  let kennaBaseUrl        = null;
+  let apiRequestHeaders = null;
+  let apiBaseUrl        = null;
 
   page.on('request', (request) => {
-    if (request.url().includes('kenna.io/v2/tee-times')) {
-      kennaRequestHeaders = request.headers();
-      kennaBaseUrl        = request.url();
+    const url = request.url();
+    if (url.includes('kenna.io/v2/tee-times') || (url.includes('clubcaddie.com') && url.includes('/slots'))) {
+      apiRequestHeaders = request.headers();
+      apiBaseUrl        = url;
     }
   });
 
@@ -53,27 +54,31 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
-    if (kennaBaseUrl && dateStr) {
-      const correctedUrl = kennaBaseUrl.replace(/date=[^&]*/i, 'date=' + dateStr);
-      console.log(`  [${course.name}] Re-firing Kenna with date ${dateStr}: ${correctedUrl.substring(0, 120)}`);
+    if (apiBaseUrl && dateStr) {
+      const correctedUrl = buildUrl(apiBaseUrl, dateStr);
+      console.log(`  [${course.name}] Re-firing API with date ${dateStr}: ${correctedUrl.substring(0, 120)}`);
       try {
         const response = await context.request.fetch(correctedUrl, {
-          headers: kennaRequestHeaders || {}
+          headers: apiRequestHeaders || {}
         });
         if (response.ok()) {
           const refiredText = await response.text();
-          console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 800)}`);
+          console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 300)}`);
+
           const kennaTimes = parseKennaJson(refiredText, course.name, facilityMap, filterByName);
           if (kennaTimes !== null && kennaTimes.length > 0) {
-            console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times`);
-            await browser.close();
-            return kennaTimes;
+            console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`);
+            await browser.close(); return kennaTimes;
+          }
+          const ccTimes = parseClubCaddieSlots(refiredText);
+          if (ccTimes !== null && ccTimes.length > 0) {
+            console.log(`  [${course.name}] ✓ Found ${ccTimes.length} times (ClubCaddie)`);
+            await browser.close(); return ccTimes;
           }
           const genericTimes = parseGenericJson(refiredText, filterByName ? course.name : null);
           if (genericTimes !== null && genericTimes.length > 0) {
             console.log(`  [${course.name}] ✓ Found ${genericTimes.length} times (generic)`);
-            await browser.close();
-            return genericTimes;
+            await browser.close(); return genericTimes;
           }
           console.log(`  [${course.name}] Parsed 0 times from re-fired response`);
         } else {
@@ -87,13 +92,11 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
-      if (kennaTimes !== null && kennaTimes.length > 0) {
-        await browser.close(); return kennaTimes;
-      }
+      if (kennaTimes !== null && kennaTimes.length > 0) { await browser.close(); return kennaTimes; }
+      const ccTimes = parseClubCaddieSlots(r.text);
+      if (ccTimes !== null && ccTimes.length > 0) { await browser.close(); return ccTimes; }
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
-      if (genericTimes !== null && genericTimes.length > 0) {
-        await browser.close(); return genericTimes;
-      }
+      if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
 
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
@@ -111,9 +114,9 @@ function buildUrl(url, dateStr) {
   if (!dateStr) return url;
   if (/clubcaddie\.com/i.test(url)) {
     const [y, m, d] = dateStr.split('-');
-    const slashDate = `${m}/${d}/${y}`;
-    if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + encodeURIComponent(slashDate));
-    return url + (url.includes('?') ? '&' : '?') + 'date=' + encodeURIComponent(slashDate);
+    const encoded = encodeURIComponent(`${m}/${d}/${y}`);
+    if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + encoded);
+    return url + (url.includes('?') ? '&' : '?') + 'date=' + encoded;
   }
   if (/foreup/i.test(url)) {
     const [y, m, d] = dateStr.split('-');
@@ -162,49 +165,52 @@ function parseKennaJson(raw, courseName, facilityMap, filterByName) {
     const data = JSON.parse(raw);
     if (!Array.isArray(data)) return null;
     if (!data[0] || (!('teetimes' in data[0]) && !('teeTimes' in data[0]))) return null;
-
     const times = [];
     for (const courseBlock of data) {
       const slots = courseBlock.teetimes || courseBlock.teeTimes || [];
       if (!Array.isArray(slots)) continue;
-
       if (filterByName) {
         const blockCourseId   = courseBlock.courseId || '';
         const blockCourseName = facilityMap[blockCourseId] || courseBlock.courseName || '';
         if (blockCourseName && !blockCourseName.toLowerCase().includes(courseName.toLowerCase())) continue;
       }
-
       for (const slot of slots) {
         if (typeof slot !== 'object' || !slot) continue;
         if (slot.status === 'closed' || slot.status === 'unavailable') continue;
-
-        const rawTime = slot.teetime || slot.TeeTime || slot.time || slot.Time ||
-                        slot.startTime || slot.start || '';
-        const avail   = slot.maxPlayers ?? slot.MaxPlayers ?? slot.openSlots ??
-                        slot.available  ?? slot.Available  ?? null;
-
-        // greenFeeCart is in cents (4500 = $45)
+        const rawTime = slot.teetime || slot.TeeTime || slot.time || slot.Time || slot.startTime || slot.start || '';
+        const avail   = slot.maxPlayers ?? slot.MaxPlayers ?? slot.openSlots ?? slot.available ?? slot.Available ?? null;
         let price = slot.price ?? slot.Price ?? slot.rate ?? slot.Rate ?? null;
         if (price === null && Array.isArray(slot.rates) && slot.rates.length > 0) {
           const r   = slot.rates[0];
           const raw = r.greenFeeCart ?? r.greenFee ?? r.price ?? r.Price ?? r.rate ?? r.total ?? null;
           if (raw !== null) price = (r.greenFeeCart !== undefined) ? raw / 100 : raw;
         }
-
         const normalized = parseAnyTime(rawTime);
-        if (normalized) {
-          times.push({
-            time:  normalized,
-            spots: avail !== null ? parseInt(avail) : null,
-            price: price !== null ? parseFloat(price) : null
-          });
-        }
+        if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price: price !== null ? parseFloat(price) : null });
       }
     }
     return times.length > 0 ? times : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
+}
+
+function parseClubCaddieSlots(raw) {
+  try {
+    const data  = JSON.parse(raw);
+    const slots = Array.isArray(data) ? data : (data.slots || data.Slots || data.data || null);
+    if (!slots) return null;
+    const times = [];
+    for (const slot of slots) {
+      if (typeof slot !== 'object' || !slot) continue;
+      const rawTime = slot.Time || slot.time || slot.StartTime || slot.startTime || '';
+      const avail   = slot.AvailableSpots ?? slot.availableSpots ?? slot.Available ?? slot.available ?? slot.Players ?? slot.players ?? null;
+      const price   = slot.Price ?? slot.price ?? slot.GreenFee ?? slot.greenFee ?? slot.Rate ?? slot.rate ?? slot.Total ?? slot.total ?? null;
+      const isAvail = slot.IsAvailable ?? slot.isAvailable ?? slot.Available ?? slot.available;
+      if (isAvail === false || isAvail === 0) continue;
+      const normalized = parseAnyTime(rawTime);
+      if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price: price !== null ? parseFloat(price) : null });
+    }
+    return times.length > 0 ? times : null;
+  } catch { return null; }
 }
 
 function parseGenericJson(raw, courseName) {
@@ -222,7 +228,6 @@ function parseGenericJson(raw, courseName) {
       null
     );
     if (!slots) return null;
-
     const times = [];
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
@@ -230,39 +235,31 @@ function parseGenericJson(raw, courseName) {
         const sc = slot.CourseName || slot.courseName || slot.Course || slot.course || '';
         if (sc && !sc.toLowerCase().includes(courseName.toLowerCase())) continue;
       }
-      const rawTime = slot.Time || slot.time || slot.TeeTime || slot.teetime ||
-                      slot.StartTime || slot.startTime || slot.start_time || '';
-      const avail   = slot.Available ?? slot.available ?? slot.OpenSpots ??
-                      slot.openSpots ?? slot.Players   ?? slot.players   ?? null;
-      const price   = slot.price ?? slot.Price ?? slot.rate ?? slot.Rate ??
-                      slot.greenFee ?? slot.green_fee ?? slot.cost ?? null;
+      const rawTime = slot.Time || slot.time || slot.TeeTime || slot.teetime || slot.StartTime || slot.startTime || slot.start_time || '';
+      const avail   = slot.Available ?? slot.available ?? slot.OpenSpots ?? slot.openSpots ?? slot.Players ?? slot.players ?? null;
+      const price   = slot.price ?? slot.Price ?? slot.rate ?? slot.Rate ?? slot.greenFee ?? slot.green_fee ?? slot.cost ?? null;
       const isAvail = slot.IsAvailable ?? slot.isAvailable ?? slot.status;
       if (isAvail === false || isAvail === 0 || isAvail === 'unavailable') continue;
-
       const normalized = parseAnyTime(rawTime);
-      if (normalized) {
-        times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price: price !== null ? parseFloat(price) : null });
-      }
+      if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price: price !== null ? parseFloat(price) : null });
     }
     return times.length > 0 ? times : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function parseAnyTime(rawTime) {
   if (!rawTime) return null;
   const t = String(rawTime).trim();
-if (t.includes('T') && t.includes('-')) {
+  if (t.includes('T') && t.includes('-')) {
     try {
       const d = new Date(t);
       if (isNaN(d)) return null;
-      // Convert UTC to Eastern Time (Detroit) — Railway server runs in UTC
+      // Convert UTC to Eastern Time (Railway server runs in UTC)
       const eastern = new Date(d.toLocaleString('en-US', { timeZone: 'America/Detroit' }));
-      let h      = eastern.getHours();
-      const m    = eastern.getMinutes();
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12  = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+      const h       = eastern.getHours();
+      const m       = eastern.getMinutes();
+      const ampm    = h >= 12 ? 'PM' : 'AM';
+      const h12     = h > 12 ? h - 12 : (h === 0 ? 12 : h);
       if (h < START_H || h > END_H) return null;
       return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
     } catch { return null; }
