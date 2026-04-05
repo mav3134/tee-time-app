@@ -6,13 +6,75 @@ const { scrapeCourse } = require('./scraper');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-const DATA_DIR     = path.join(__dirname, 'data');
+// Use /data volume if available (Railway persistent volume), else local data dir
+const DATA_DIR     = process.env.DATA_DIR || path.join(__dirname, 'data');
+const COURSES_FILE = path.join(DATA_DIR, 'courses.json');
 const RESULTS_FILE = path.join(DATA_DIR, 'results.json');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(COURSES_FILE)) fs.writeFileSync(COURSES_FILE, '[]');
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ── Courses API ───────────────────────────────────────────────
+
+function readCourses() {
+  try { return JSON.parse(fs.readFileSync(COURSES_FILE, 'utf8')); }
+  catch { return []; }
+}
+
+function writeCourses(courses) {
+  fs.writeFileSync(COURSES_FILE, JSON.stringify(courses, null, 2));
+}
+
+app.get('/api/courses', (req, res) => {
+  res.json(readCourses());
+});
+
+app.post('/api/courses', (req, res) => {
+  const { name, url, state } = req.body;
+  if (!name || !url) return res.status(400).json({ error: 'name and url required' });
+  const courses   = readCourses();
+  const newCourse = { id: Date.now(), name: name.trim(), url: url.trim(), state: state || 'Michigan' };
+  courses.push(newCourse);
+  writeCourses(courses);
+  res.json(newCourse);
+});
+
+app.delete('/api/courses/:id', (req, res) => {
+  const courses = readCourses().filter(c => c.id !== parseInt(req.params.id));
+  writeCourses(courses);
+  res.json({ success: true });
+});
+
+// ── States API ────────────────────────────────────────────────
+
+const STATES_FILE = path.join(DATA_DIR, 'states.json');
+if (!fs.existsSync(STATES_FILE)) fs.writeFileSync(STATES_FILE, '["Michigan"]');
+
+function readStates() {
+  try { return JSON.parse(fs.readFileSync(STATES_FILE, 'utf8')); }
+  catch { return ['Michigan']; }
+}
+
+app.get('/api/states', (req, res) => res.json(readStates()));
+
+app.post('/api/states', (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const states = readStates();
+  if (!states.includes(name.trim())) {
+    states.push(name.trim());
+    states.sort();
+    fs.writeFileSync(STATES_FILE, JSON.stringify(states, null, 2));
+  }
+  res.json(states);
+});
 
 // ── Results ───────────────────────────────────────────────────
 
@@ -36,7 +98,6 @@ cachedResults = readResults();
 app.get('/api/results', (req, res) => res.json(cachedResults));
 
 // ── Refresh ───────────────────────────────────────────────────
-// Courses are passed from the browser (stored in localStorage there)
 
 app.post('/api/refresh', async (req, res) => {
   const { date = '', courses = [] } = req.body;
@@ -77,4 +138,5 @@ app.post('/api/refresh', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`\n⛳  Tee Time App running at http://localhost:${PORT}\n`);
+  console.log(`   Data directory: ${DATA_DIR}\n`);
 });
