@@ -278,6 +278,25 @@
   </main>
 </div>
 
+<!-- Edit course modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>Edit Course</h3>
+    <div>
+      <label>Course Name</label>
+      <input type="text" id="edit-name" />
+    </div>
+    <div>
+      <label>Booking URL</label>
+      <input type="url" id="edit-url" />
+    </div>
+    <div class="modal-btns">
+      <button class="btn-modal-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-modal-save" onclick="saveEditModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const START_H = 6, END_H = 18;
 function getSlots() {
@@ -642,25 +661,5 @@ onSliderChange();
   await loadCourses();
   renderCourseList();
 })();
-</script>
-<!-- Edit course modal -->
-<div class="modal-overlay" id="edit-modal">
-  <div class="modal">
-    <h3>Edit Course</h3>
-    <div>
-      <label>Course Name</label>
-      <input type="text" id="edit-name" />
-    </div>
-    <div>
-      <label>Booking URL</label>
-      <input type="url" id="edit-url" />
-    </div>
-    <div class="modal-btns">
-      <button class="btn-modal-cancel" onclick="closeEditModal()">Cancel</button>
-      <button class="btn-modal-save" onclick="saveEditModal()">Save</button>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>
