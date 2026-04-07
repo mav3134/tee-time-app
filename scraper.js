@@ -529,21 +529,13 @@ function extractSpots(ctx) {
 }
 
 function extractPrice(ctx) {
-  const patterns = [
-    /\$\s*(\d+(?:\.\d{1,2})?)/g,
-    /(\d+\.\d{2})\s*(?:USD|per|\/)/gi,
-    /price[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
-    /rate[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
-    /green\s*fee[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
-    /total[:\s]+\$?(\d+(?:\.\d{1,2})?)/gi,
-  ];
+  // Only match numbers directly preceded by $ to avoid picking up percentages, distances, etc.
+  const re = /\$\s*(\d+(?:\.\d{1,2})?)/g;
   let highest = null;
-  for (const p of patterns) {
-    let m;
-    while ((m = p.exec(ctx)) !== null) {
-      const n = parseFloat(m[1]);
-      if (n > 0 && n < 500 && (highest === null || n > highest)) highest = n;
-    }
+  let m;
+  while ((m = re.exec(ctx)) !== null) {
+    const n = parseFloat(m[1]);
+    if (n >= 5 && n <= 200 && (highest === null || n > highest)) highest = n;
   }
   return highest;
 }
