@@ -161,31 +161,17 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
-// TeeWire: uses datepaginator — click the target date
+// TeeWire: uses datepaginator with data-moment="YYYY-MM-DD"
 if (/teewire\.net/i.test(course.url) && dateStr) {
   try {
-    const [y, m, d] = dateStr.split('-');
-    const targetDay   = parseInt(d);
-    const targetMonth = parseInt(m) - 1;
-    const targetYear  = parseInt(y);
-
-    const clicked = await page.evaluate(({ targetDay, targetMonth, targetYear }) => {
-      // datepaginator uses data-moment with unix timestamps in milliseconds
-      const allEls = document.querySelectorAll('[data-moment]');
-      for (const el of allEls) {
-        const ts = parseInt(el.getAttribute('data-moment'));
-        if (!isNaN(ts)) {
-          const date = new Date(ts);
-          if (date.getDate() === targetDay && date.getMonth() === targetMonth && date.getFullYear() === targetYear) {
-            el.click();
-            return `clicked: ${el.getAttribute('data-moment')}`;
-          }
-        }
+    const clicked = await page.evaluate((targetDate) => {
+      const el = document.querySelector(`[data-moment="${targetDate}"]`);
+      if (el) {
+        el.click();
+        return `clicked ${targetDate}`;
       }
-      // Log all data-moment values to see format
-      const moments = Array.from(allEls).slice(0, 5).map(el => el.getAttribute('data-moment'));
-      return `no match, sample data-moments: ${JSON.stringify(moments)}`;
-    }, { targetDay, targetMonth, targetYear });
+      return `date ${targetDate} not found in paginator`;
+    }, dateStr);
 
     console.log(`  [${course.name}] TeeWire: ${clicked}`);
     await page.waitForTimeout(3000);
