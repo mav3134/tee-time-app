@@ -182,6 +182,7 @@
   <div class="header-left">
     <div>
       <h1>⛳ Tee Time Finder</h1>
+      <div class="tagline">Detroit Area Golf</div>
     </div>
     <div class="state-selector-wrap">
       <span class="date-label">State</span>
@@ -195,7 +196,7 @@
       <input type="date" id="date-picker" />
     </div>
     <button class="btn-refresh" id="refresh-btn" onclick="startRefresh()">
-      <span id="refresh-icon">↻</span> FIND TEE TIMES
+      <span id="refresh-icon">↻</span> REFRESH
     </button>
   </div>
 </header>
@@ -269,42 +270,43 @@ const ALL_SLOTS = getSlots();
 
 // ── State management ──────────────────────────────────────────
 
-function getStates() {
-  try { return JSON.parse(localStorage.getItem('tee_states') || '["Michigan"]'); }
-  catch { return ['Michigan']; }
-}
-function saveStates(arr) { localStorage.setItem('tee_states', JSON.stringify(arr)); }
+let allStates = ['Michigan'];
 
 function getCurrentState() {
-  return localStorage.getItem('tee_current_state') || getStates()[0] || 'Michigan';
+  return localStorage.getItem('tee_current_state') || allStates[0] || 'Michigan';
 }
 function setCurrentState(s) { localStorage.setItem('tee_current_state', s); }
 
+async function loadStates() {
+  try {
+    allStates = await fetch('/api/states').then(r => r.json());
+  } catch { allStates = ['Michigan']; }
+  renderStateSelect();
+}
+
 function renderStateSelect() {
-  const sel    = document.getElementById('state-select');
-  const states = getStates();
-  const cur    = getCurrentState();
-  sel.innerHTML = states.map(s =>
+  const sel = document.getElementById('state-select');
+  const cur = getCurrentState();
+  sel.innerHTML = allStates.map(s =>
     `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s)}</option>`
   ).join('') + `<option value="__add__" class="add-state-opt">＋ Add State…</option>`;
 }
 
-function onStateChange(val) {
+async function onStateChange(val) {
   if (val === '__add__') {
     const name = prompt('Enter state name:');
     if (name && name.trim()) {
-      const states = getStates();
       const trimmed = name.trim();
-      if (!states.includes(trimmed)) {
-        states.push(trimmed);
-        states.sort();
-        saveStates(states);
-      }
+      const res = await fetch('/api/states', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed })
+      });
+      allStates = await res.json();
       setCurrentState(trimmed);
     }
     renderStateSelect();
     renderCourseList();
-    // Clear results when switching state
     lastResults = [];
     document.getElementById('results-area').innerHTML = `<div class="empty-state"><div class="icon">🏌️</div><h2>Ready to Find Tee Times</h2><p>Hit Refresh to load tee times for ${esc(getCurrentState())}.</p></div>`;
     document.getElementById('legend').style.display = 'none';
@@ -362,16 +364,9 @@ function applyTimeFilter() {
 // ── Courses ───────────────────────────────────────────────────
 let courses = [];
 
-function loadCourses() {
-  try { courses = JSON.parse(localStorage.getItem('tee_courses') || '[]'); }
+async function loadCourses() {
+  try { courses = await fetch('/api/courses').then(r => r.json()); }
   catch { courses = []; }
-
-  // Migrate old courses without a state to Michigan
-  let migrated = false;
-  courses.forEach(c => {
-    if (!c.state) { c.state = 'Michigan'; migrated = true; }
-  });
-  if (migrated) localStorage.setItem('tee_courses', JSON.stringify(courses));
 }
 
 function getCoursesForState(state) {
@@ -401,22 +396,25 @@ function renderCourseList() {
   }).join('');
 }
 
-function addCourse() {
+async function addCourse() {
   const name  = document.getElementById('inp-name').value.trim();
   const url   = document.getElementById('inp-url').value.trim();
   const state = getCurrentState();
   if (!name || !url) { alert('Please enter both a name and URL.'); return; }
-  const c = { id: Date.now(), name, url, state };
+  const c = await fetch('/api/courses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url, state })
+  }).then(r => r.json());
   courses.push(c);
-  localStorage.setItem('tee_courses', JSON.stringify(courses));
   renderCourseList();
   document.getElementById('inp-name').value = '';
   document.getElementById('inp-url').value  = '';
 }
 
-function deleteCourse(id) {
+async function deleteCourse(id) {
+  await fetch(`/api/courses/${id}`, { method: 'DELETE' });
   courses = courses.filter(c => c.id !== id);
-  localStorage.setItem('tee_courses', JSON.stringify(courses));
   saveDisabled(getDisabled().filter(d => d !== id));
   renderCourseList();
 }
@@ -571,11 +569,13 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 // ── Init ──────────────────────────────────────────────────────
 const t = new Date();
 document.getElementById('date-picker').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
-
-loadCourses();
-renderStateSelect();
-renderCourseList();
 onSliderChange();
+
+(async () => {
+  await loadStates();
+  await loadCourses();
+  renderCourseList();
+})();
 </script>
 </body>
 </html>
