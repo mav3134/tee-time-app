@@ -370,6 +370,7 @@ async function parseWithClaude(raw, courseName) {
   try {
     const https   = require('https');
     const trimmed = raw.substring(0, 8000);
+console.log(`  Claude AI input preview: ${trimmed.substring(0, 400)}`);
     const prompt  = `You are extracting golf tee time data from a booking system API response.
 
 Course: ${courseName}
