@@ -161,27 +161,36 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
-// TeeWire: set date via page interaction since URL doesn't change
+// TeeWire: uses datepaginator — click the target date
 if (/teewire\.net/i.test(course.url) && dateStr) {
   try {
-    // Try setting a date input directly
     const [y, m, d] = dateStr.split('-');
-    const dateInputs = page.locator('input[type="date"], input[name*="date"], input[id*="date"]');
-    const count = await dateInputs.count();
-    if (count > 0) {
-      await dateInputs.first().fill(dateStr);
-      await dateInputs.first().press('Enter');
-      console.log(`  [${course.name}] Set date input to ${dateStr}`);
-      await page.waitForTimeout(3000);
-    } else {
-      // Try clicking next/prev arrows to navigate to the right date
-      console.log(`  [${course.name}] No date input found, checking for calendar nav`);
-      const pageDate = await page.evaluate(() => {
-        const el = document.querySelector('[class*="date"], [id*="date"], [class*="calendar"]');
-        return el ? el.textContent : 'not found';
-      });
-      console.log(`  [${course.name}] Page date element: ${pageDate?.substring(0, 100)}`);
-    }
+    const targetDay = parseInt(d);
+    const targetMonth = parseInt(m) - 1; // JS months are 0-indexed
+    const targetYear = parseInt(y);
+
+    // datepaginator renders date items as li elements with data-moment attribute
+    // Format is typically unix timestamp or date string
+    const clicked = await page.evaluate(({ targetDay, targetMonth, targetYear }) => {
+      // Try data-moment attribute (unix timestamp)
+      const items = document.querySelectorAll('li[data-moment], .dp-item[data-moment], [data-moment]');
+      for (const item of items) {
+        const ts = parseInt(item.getAttribute('data-moment'));
+        if (!isNaN(ts)) {
+          const d = new Date(ts);
+          if (d.getDate() === targetDay && d.getMonth() === targetMonth && d.getFullYear() === targetYear) {
+            item.click();
+            return `clicked data-moment: ${item.getAttribute('data-moment')}`;
+          }
+        }
+      }
+      // Try elements containing just the day number
+      const allItems = document.querySelectorAll('.dp-item, li.active, .datepaginator li, [class*="dp-"]');
+      return `found ${allItems.length} dp items, no match`;
+    }, { targetDay, targetMonth, targetYear });
+
+    console.log(`  [${course.name}] TeeWire date click: ${clicked}`);
+    await page.waitForTimeout(3000);
   } catch (e) {
     console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
   }
