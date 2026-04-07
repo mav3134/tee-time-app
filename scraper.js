@@ -79,7 +79,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         });
         if (response.ok()) {
           const refiredText = await response.text();
-          console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 600)}`);
+          console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 300)}`);
           const kennaTimes = parseKennaJson(refiredText, course.name, facilityMap, filterByName);
           if (kennaTimes !== null && kennaTimes.length > 0) {
             console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`);
@@ -112,7 +112,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     for (const r of interceptedResponses) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
       console.log(`  [${course.name}] Trying: ${r.url.substring(0, 80)}`);
-      console.log(`  [${course.name}] Preview: ${r.text.substring(0, 200)}`);
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
       if (kennaTimes !== null && kennaTimes.length > 0) { await browser.close(); return kennaTimes; }
       const foreUpTimes = parseForeUpJson(r.text);
@@ -121,6 +120,25 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (teesnapTimes !== null && teesnapTimes.length > 0) { await browser.close(); return teesnapTimes; }
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
+    }
+
+    // ── Claude AI fallback for unknown booking systems ────────
+    // Only fires if all known parsers failed and ANTHROPIC_API_KEY is set
+    if (process.env.ANTHROPIC_API_KEY && interceptedResponses.length > 0) {
+      console.log(`  [${course.name}] Trying Claude AI fallback...`);
+      // Pick the most likely tee time response — largest JSON that isn't facilities/analytics
+      const candidate = interceptedResponses
+        .filter(r => !r.url.includes('/facilities') && !r.url.includes('launchdarkly') && !r.url.includes('analytics'))
+        .sort((a, b) => b.text.length - a.text.length)[0];
+
+      if (candidate) {
+        const aiTimes = await parseWithClaude(candidate.text, course.name);
+        if (aiTimes && aiTimes.length > 0) {
+          console.log(`  [${course.name}] ✓ Found ${aiTimes.length} times (Claude AI)`);
+          await browser.close();
+          return aiTimes;
+        }
+      }
     }
 
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
@@ -275,57 +293,105 @@ function parseForeUpJson(raw) {
 
 function parseTeesnapJson(raw) {
   try {
-    const data = JSON.parse(raw);
-
-    // Teesnap structure: data.teeTimes.teeTimes or data.teeTimes or array
-    const slots = (
-      Array.isArray(data)                            ? data :
-      Array.isArray(data.teeTimes?.teeTimes)         ? data.teeTimes.teeTimes :
-      Array.isArray(data.teeTimes)                   ? data.teeTimes :
-      Array.isArray(data.tee_times)                  ? data.tee_times :
-      Array.isArray(data.data)                       ? data.data : null
-    );
+    const data  = JSON.parse(raw);
+    const slots = Array.isArray(data) ? data :
+                  Array.isArray(data.tee_times)  ? data.tee_times  :
+                  Array.isArray(data.teeTimes)   ? data.teeTimes   :
+                  Array.isArray(data.data)        ? data.data       : null;
     if (!slots || !slots.length) return null;
-
-    // Confirm Teesnap format by checking for prices array with roundType
     const sample = slots[0];
-    if (!sample) return null;
-    const hasTeesnapFields = Array.isArray(sample.prices) || Array.isArray(sample.teeOffSections);
-    if (!hasTeesnapFields) return null;
-
+    if (!sample || (!('teeTime' in sample) && !('tee_time' in sample) && !('time' in sample))) return null;
     const times = [];
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
-
-      // Get time from teeOffSections[0].teeOff or teeTime field
-      const sections = slot.teeOffSections || [];
-      const rawTime  = (sections[0] && sections[0].teeOff) || slot.teeTime || slot.teeoff ||
-                       slot.time || slot.startTime || '';
-
-      // Get available spots
-      const avail = slot.availableSpots ?? slot.available_spots ?? slot.spots ??
-                    slot.maxPlayers ?? (sections[0] && sections[0].availableSpots) ?? null;
-
-      // Get 18-hole price with cart (priceWithAddOn) — fall back to price if no addOn
-      let price = null;
-      if (Array.isArray(slot.prices) && slot.prices.length > 0) {
-        const eighteen = slot.prices.find(p => p.roundType === 'EIGHTEEN_HOLE') || slot.prices[0];
-        if (eighteen) {
-          const withCart    = parseFloat(eighteen.priceWithAddOn ?? eighteen.price_with_addon ?? 0);
-          const withoutCart = parseFloat(eighteen.price ?? 0);
-          price = withCart > 0 ? withCart : (withoutCart > 0 ? withoutCart : null);
-        }
-      }
-
+      const rawTime = slot.teeTime || slot.tee_time || slot.time || '';
+      const avail   = slot.$$slotAvailable ?? slot.slotAvailable ?? slot.available_spots ??
+                      slot.spots           ?? slot.maxPlayers     ?? null;
+      const price   = slot.price ?? slot.rate ?? slot.green_fee ?? slot.greenFee ?? null;
       const normalized = parseAnyTime(rawTime);
       if (normalized) times.push({
         time:  normalized,
         spots: avail !== null ? parseInt(avail) : null,
-        price
+        price: price !== null ? parseFloat(price) : null
       });
     }
     return times.length > 0 ? times : null;
   } catch { return null; }
+}
+
+// ── Claude AI parser for unknown booking systems ──────────────
+
+async function parseWithClaude(raw, courseName) {
+  try {
+    const https = require('https');
+
+    // Trim to keep costs low — 8000 chars covers most API responses
+    const trimmed = raw.substring(0, 8000);
+
+    const prompt = `You are extracting golf tee time data from a booking system API response.
+
+Course: ${courseName}
+
+Here is the raw API response:
+${trimmed}
+
+Extract all AVAILABLE tee times. Return ONLY valid JSON, no explanation, no markdown:
+[{"time":"9:00 AM","spots":4,"price":45},{"time":"9:10 AM","spots":2,"price":45}]
+
+Rules:
+- "time" must be in 12-hour format like "9:00 AM"
+- "spots" is number of available player slots (1-4), or null if unknown
+- "price" is the total price in dollars for one golfer including cart if shown, or null if unknown. If multiple prices exist (9-hole vs 18-hole), use the highest (18-hole) price
+- Only include times between 6:00 AM and 6:00 PM
+- Skip unavailable/booked slots
+- If no tee times found, return []`;
+
+    const body = JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.anthropic.com',
+        path:     '/v1/messages',
+        method:   'POST',
+        headers: {
+          'Content-Type':      'application/json',
+          'x-api-key':         process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'Content-Length':    Buffer.byteLength(body)
+        }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve(data));
+      });
+      req.on('error', reject);
+      req.setTimeout(15000, () => { req.destroy(); reject(new Error('Claude API timeout')); });
+      req.write(body);
+      req.end();
+    });
+
+    const response = JSON.parse(text);
+    if (!response.content || !response.content[0]) return null;
+
+    const raw2  = response.content[0].text.trim();
+    const clean = raw2.replace(/```json|```/g, '').trim();
+    const times = JSON.parse(clean);
+
+    if (!Array.isArray(times)) return null;
+    return times.map(t => ({
+      time:  t.time  || null,
+      spots: t.spots !== undefined ? t.spots : null,
+      price: t.price !== undefined ? t.price : null
+    })).filter(t => t.time);
+
+  } catch (e) {
+    console.log(`  Claude API error: ${e.message}`);
+    return null;
+  }
 }
 
 function parseGenericJson(raw, courseName) {
