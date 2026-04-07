@@ -186,7 +186,11 @@ if (/teewire\.net/i.test(course.url) && dateStr) {
       }
       // Try elements containing just the day number
       const allItems = document.querySelectorAll('.dp-item, li.active, .datepaginator li, [class*="dp-"]');
-      return `found ${allItems.length} dp items, no match`;
+const sample = Array.from(allItems).slice(0, 3).map(el => ({
+  text: el.textContent.trim().substring(0, 30),
+  attrs: Array.from(el.attributes).map(a => `${a.name}="${a.value}"`).join(' ')
+}));
+return JSON.stringify(sample);
     }, { targetDay, targetMonth, targetYear });
 
     console.log(`  [${course.name}] TeeWire date click: ${clicked}`);
