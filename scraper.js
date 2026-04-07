@@ -383,7 +383,7 @@ Extract all AVAILABLE tee times. Return ONLY valid JSON, no explanation, no mark
 Rules:
 - "time" must be in 12-hour format like "9:00 AM"
 - "spots" is number of available player slots (1-4), or null if unknown
-- "price" is the total price in dollars for one golfer including cart if shown, or null if unknown. If multiple prices exist (9-hole vs 18-hole), use the highest (18-hole) price
+- "price" is the exact dollar amount displayed on the page (e.g. if it says "70% off: $30.00" use 30, not 100). Always use the final price shown, never back-calculate originals. If multiple prices exist (9-hole vs 18-hole), use the highest displayed price, or null if unknown
 - Only include times between 6:00 AM and 6:00 PM
 - Skip unavailable/booked slots
 - If no tee times found, return []`;
