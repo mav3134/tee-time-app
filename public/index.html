@@ -174,6 +174,32 @@
   .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
   .spin { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 100; align-items: center; justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal {
+    background: var(--surface); border: 2px solid var(--border); border-radius: 10px;
+    padding: 24px; width: 320px; max-width: 90vw; display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  }
+  .modal h3 { font-family: var(--display); font-size: 20px; letter-spacing: 1px; color: var(--text); }
+  .modal label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+  .modal input { width: 100%; }
+  .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .btn-modal-save {
+    background: var(--green); color: #fff; font-family: var(--sans); font-weight: 600;
+    font-size: 13px; border: none; border-radius: 4px; padding: 8px 18px; cursor: pointer;
+  }
+  .btn-modal-save:hover { background: #235c42; }
+  .btn-modal-cancel {
+    background: var(--bg); color: var(--muted); font-family: var(--sans); font-weight: 600;
+    font-size: 13px; border: 1.5px solid var(--border); border-radius: 4px; padding: 8px 18px; cursor: pointer;
+  }
+  .btn-modal-cancel:hover { border-color: var(--muted); }
 </style>
 </head>
 <body>
@@ -182,6 +208,7 @@
   <div class="header-left">
     <div>
       <h1>⛳ Tee Time Finder</h1>
+      <div class="tagline">Detroit Area Golf</div>
     </div>
     <div class="state-selector-wrap">
       <span class="date-label">State</span>
@@ -195,7 +222,7 @@
       <input type="date" id="date-picker" />
     </div>
     <button class="btn-refresh" id="refresh-btn" onclick="startRefresh()">
-      <span id="refresh-icon">↻</span> FIND TEE TIMES
+      <span id="refresh-icon">↻</span> REFRESH
     </button>
   </div>
 </header>
@@ -385,7 +412,7 @@ function renderCourseList() {
   el.innerHTML = filtered.map(c => {
     const on = isCourseEnabled(c.id);
     return `<div class="course-item ${on ? '' : 'disabled'}">
-      <div class="ci-name" title="${esc(c.name)}">${esc(c.name)}</div>
+      <div class="ci-name" title="Click to edit" onclick="openEditModal(${c.id})" style="cursor:pointer">${esc(c.name)}</div>
       <label class="toggle" title="${on ? 'Disable' : 'Enable'}">
         <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleCourse(${c.id})" />
         <span class="toggle-track"></span>
@@ -412,9 +439,47 @@ async function addCourse() {
 }
 
 async function deleteCourse(id) {
+  const course = courses.find(c => c.id === id);
+  if (!confirm(`Are you sure you want to delete "${course ? course.name : 'this course'}"?`)) return;
   await fetch(`/api/courses/${id}`, { method: 'DELETE' });
   courses = courses.filter(c => c.id !== id);
   saveDisabled(getDisabled().filter(d => d !== id));
+  renderCourseList();
+}
+
+// ── Edit modal ────────────────────────────────────────────────
+let editingId = null;
+
+function openEditModal(id) {
+  const course = courses.find(c => c.id === id);
+  if (!course) return;
+  editingId = id;
+  document.getElementById('edit-name').value = course.name;
+  document.getElementById('edit-url').value  = course.url;
+  document.getElementById('edit-modal').classList.add('visible');
+  document.getElementById('edit-name').focus();
+}
+
+function closeEditModal() {
+  editingId = null;
+  document.getElementById('edit-modal').classList.remove('visible');
+}
+
+async function saveEditModal() {
+  if (!editingId) return;
+  const name = document.getElementById('edit-name').value.trim();
+  const url  = document.getElementById('edit-url').value.trim();
+  if (!name || !url) { alert('Please enter both a name and URL.'); return; }
+
+  await fetch(`/api/courses/${editingId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url })
+  });
+
+  const c = courses.find(c => c.id === editingId);
+  if (c) { c.name = name; c.url = url; }
+  closeEditModal();
   renderCourseList();
 }
 
@@ -564,6 +629,8 @@ async function startRefresh() {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 ['inp-name','inp-url'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') addCourse(); }));
+['edit-name','edit-url'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') saveEditModal(); if(e.key==='Escape') closeEditModal(); }));
+document.getElementById('edit-modal').addEventListener('click', e => { if(e.target === e.currentTarget) closeEditModal(); });
 
 // ── Init ──────────────────────────────────────────────────────
 const t = new Date();
@@ -576,5 +643,24 @@ onSliderChange();
   renderCourseList();
 })();
 </script>
+<!-- Edit course modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>Edit Course</h3>
+    <div>
+      <label>Course Name</label>
+      <input type="text" id="edit-name" />
+    </div>
+    <div>
+      <label>Booking URL</label>
+      <input type="url" id="edit-url" />
+    </div>
+    <div class="modal-btns">
+      <button class="btn-modal-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-modal-save" onclick="saveEditModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
