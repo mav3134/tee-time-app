@@ -61,28 +61,27 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     if (isForeUpIndex) {
       try {
         // Try to match any word from the course name against dropdown options
-        // e.g. "Emerald Greens Gold" -> tries "Gold", "Greens", "Emerald"
-        const select = page.locator('select').first();
-        if (await select.isVisible({ timeout: 3000 })) {
-          // Get all available options from the dropdown
-          const options = await select.locator('option').allTextContents();
-          console.log(`  [${course.name}] Dropdown options: ${options.join(', ')}`);
-
-          // Try each word in the course name (reversed — last word first)
-          const words = course.name.split(/\s+/).reverse();
-          let matched = false;
-          for (const word of words) {
-            if (word.length < 2) continue;
-            const match = options.find(o => o.toLowerCase().includes(word.toLowerCase()));
-            if (match) {
-              await select.selectOption({ label: match });
-              console.log(`  [${course.name}] Selected facility: ${match} (matched on "${word}")`);
-              await page.waitForTimeout(1000);
-              matched = true;
-              break;
+        try {
+          const select = page.locator('select').first();
+          if (await select.isVisible({ timeout: 3000 })) {
+            const optionData = await select.evaluate(el =>
+              Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+            );
+            console.log(`  [${course.name}] Dropdown options: ${optionData.map(o => o.text).join(', ')}`);
+            const words = course.name.split(/\s+/).reverse();
+            for (const word of words) {
+              if (word.length < 2) continue;
+              const opt = optionData.find(o => o.text.toLowerCase().includes(word.toLowerCase()));
+              if (opt) {
+                await select.selectOption({ value: opt.value });
+                console.log(`  [${course.name}] Selected: ${opt.text} (matched "${word}")`);
+                await page.waitForTimeout(1000);
+                break;
+              }
             }
           }
-          if (!matched) console.log(`  [${course.name}] No dropdown match found for course name words`);
+        } catch (e) {
+          console.log(`  [${course.name}] Dropdown selection skipped: ${e.message.substring(0, 80)}`);
         }
 
         // Click the Public button
@@ -93,7 +92,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
           await page.waitForTimeout(6000);
         }
       } catch (e) {
-        console.log(`  [${course.name}] Interaction error: ${e.message}`);
+        console.log(`  [${course.name}] Interaction error: ${e.message.substring(0, 100)}`);
       }
     }
 
