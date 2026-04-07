@@ -161,7 +161,31 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
-
+// TeeWire: set date via page interaction since URL doesn't change
+if (/teewire\.net/i.test(course.url) && dateStr) {
+  try {
+    // Try setting a date input directly
+    const [y, m, d] = dateStr.split('-');
+    const dateInputs = page.locator('input[type="date"], input[name*="date"], input[id*="date"]');
+    const count = await dateInputs.count();
+    if (count > 0) {
+      await dateInputs.first().fill(dateStr);
+      await dateInputs.first().press('Enter');
+      console.log(`  [${course.name}] Set date input to ${dateStr}`);
+      await page.waitForTimeout(3000);
+    } else {
+      // Try clicking next/prev arrows to navigate to the right date
+      console.log(`  [${course.name}] No date input found, checking for calendar nav`);
+      const pageDate = await page.evaluate(() => {
+        const el = document.querySelector('[class*="date"], [id*="date"], [class*="calendar"]');
+        return el ? el.textContent : 'not found';
+      });
+      console.log(`  [${course.name}] Page date element: ${pageDate?.substring(0, 100)}`);
+    }
+  } catch (e) {
+    console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
+  }
+}
     // Claude AI fallback for unknown booking systems
     if (process.env.ANTHROPIC_API_KEY && interceptedResponses.length > 0) {
       console.log(`  [${course.name}] Trying Claude AI fallback...`);
