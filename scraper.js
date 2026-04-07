@@ -13,8 +13,9 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const interceptedResponses = [];
   let apiRequestHeaders = null;
   let apiBaseUrl        = null;
-  const isForeUp   = /foreupsoftware\.com/i.test(course.url);
-  const isTeesnap  = /teesnap\.net/i.test(course.url);
+  const isForeUp      = /foreupsoftware\.com/i.test(course.url);
+  const isForeUpIndex = isForeUp && /\/booking\/\d+/.test(course.url);
+  const isTeesnap     = /teesnap\.net/i.test(course.url);
 
   page.on('request', (request) => {
     const url = request.url();
@@ -22,7 +23,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       apiRequestHeaders = request.headers();
       apiBaseUrl        = url;
     }
-    if (url.includes('foreupsoftware.com') && url.includes('/api/booking/times')) {
+    if (url.includes('foreupsoftware.com') && url.includes('/api/booking/')) {
       apiRequestHeaders = request.headers();
       apiBaseUrl        = url;
     }
@@ -55,6 +56,46 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
 
     const waitMs = (isForeUp || isTeesnap) ? 10000 : 6000;
     await page.waitForTimeout(waitMs);
+
+    // foreUP index pages: select facility from dropdown then click Public
+    if (isForeUpIndex) {
+      try {
+        // Try to match any word from the course name against dropdown options
+        // e.g. "Emerald Greens Gold" -> tries "Gold", "Greens", "Emerald"
+        const select = page.locator('select').first();
+        if (await select.isVisible({ timeout: 3000 })) {
+          // Get all available options from the dropdown
+          const options = await select.locator('option').allTextContents();
+          console.log(`  [${course.name}] Dropdown options: ${options.join(', ')}`);
+
+          // Try each word in the course name (reversed — last word first)
+          const words = course.name.split(/\s+/).reverse();
+          let matched = false;
+          for (const word of words) {
+            if (word.length < 2) continue;
+            const match = options.find(o => o.toLowerCase().includes(word.toLowerCase()));
+            if (match) {
+              await select.selectOption({ label: match });
+              console.log(`  [${course.name}] Selected facility: ${match} (matched on "${word}")`);
+              await page.waitForTimeout(1000);
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) console.log(`  [${course.name}] No dropdown match found for course name words`);
+        }
+
+        // Click the Public button
+        const publicBtn = page.locator('button:has-text("Public"), a:has-text("Public"), input[value="Public"]').first();
+        if (await publicBtn.isVisible({ timeout: 5000 })) {
+          await publicBtn.click();
+          console.log(`  [${course.name}] Clicked Public button`);
+          await page.waitForTimeout(6000);
+        }
+      } catch (e) {
+        console.log(`  [${course.name}] Interaction error: ${e.message}`);
+      }
+    }
 
     console.log(`  [${course.name}] Intercepted ${interceptedResponses.length} responses`);
 
@@ -122,15 +163,12 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
 
-    // ── Claude AI fallback for unknown booking systems ────────
-    // Only fires if all known parsers failed and ANTHROPIC_API_KEY is set
+    // Claude AI fallback for unknown booking systems
     if (process.env.ANTHROPIC_API_KEY && interceptedResponses.length > 0) {
       console.log(`  [${course.name}] Trying Claude AI fallback...`);
-      // Pick the most likely tee time response — largest JSON that isn't facilities/analytics
       const candidate = interceptedResponses
         .filter(r => !r.url.includes('/facilities') && !r.url.includes('launchdarkly') && !r.url.includes('analytics'))
         .sort((a, b) => b.text.length - a.text.length)[0];
-
       if (candidate) {
         const aiTimes = await parseWithClaude(candidate.text, course.name);
         if (aiTimes && aiTimes.length > 0) {
@@ -294,41 +332,46 @@ function parseForeUpJson(raw) {
 function parseTeesnapJson(raw) {
   try {
     const data  = JSON.parse(raw);
-    const slots = Array.isArray(data) ? data :
-                  Array.isArray(data.tee_times)  ? data.tee_times  :
-                  Array.isArray(data.teeTimes)   ? data.teeTimes   :
-                  Array.isArray(data.data)        ? data.data       : null;
+    const slots = (
+      Array.isArray(data)                            ? data :
+      Array.isArray(data.teeTimes?.teeTimes)         ? data.teeTimes.teeTimes :
+      Array.isArray(data.teeTimes)                   ? data.teeTimes :
+      Array.isArray(data.tee_times)                  ? data.tee_times :
+      Array.isArray(data.data)                       ? data.data : null
+    );
     if (!slots || !slots.length) return null;
     const sample = slots[0];
-    if (!sample || (!('teeTime' in sample) && !('tee_time' in sample) && !('time' in sample))) return null;
+    if (!sample) return null;
+    const hasTeesnapFields = Array.isArray(sample.prices) || Array.isArray(sample.teeOffSections);
+    if (!hasTeesnapFields) return null;
     const times = [];
     for (const slot of slots) {
       if (typeof slot !== 'object' || !slot) continue;
-      const rawTime = slot.teeTime || slot.tee_time || slot.time || '';
-      const avail   = slot.$$slotAvailable ?? slot.slotAvailable ?? slot.available_spots ??
-                      slot.spots           ?? slot.maxPlayers     ?? null;
-      const price   = slot.price ?? slot.rate ?? slot.green_fee ?? slot.greenFee ?? null;
+      const sections = slot.teeOffSections || [];
+      const rawTime  = (sections[0] && sections[0].teeOff) || slot.teeTime || slot.teeoff || slot.time || slot.startTime || '';
+      const avail    = slot.availableSpots ?? slot.available_spots ?? slot.spots ??
+                       slot.maxPlayers ?? (sections[0] && sections[0].availableSpots) ?? null;
+      let price = null;
+      if (Array.isArray(slot.prices) && slot.prices.length > 0) {
+        const eighteen = slot.prices.find(p => p.roundType === 'EIGHTEEN_HOLE') || slot.prices[0];
+        if (eighteen) {
+          const withCart    = parseFloat(eighteen.priceWithAddOn ?? eighteen.price_with_addon ?? 0);
+          const withoutCart = parseFloat(eighteen.price ?? 0);
+          price = withCart > 0 ? withCart : (withoutCart > 0 ? withoutCart : null);
+        }
+      }
       const normalized = parseAnyTime(rawTime);
-      if (normalized) times.push({
-        time:  normalized,
-        spots: avail !== null ? parseInt(avail) : null,
-        price: price !== null ? parseFloat(price) : null
-      });
+      if (normalized) times.push({ time: normalized, spots: avail !== null ? parseInt(avail) : null, price });
     }
     return times.length > 0 ? times : null;
   } catch { return null; }
 }
 
-// ── Claude AI parser for unknown booking systems ──────────────
-
 async function parseWithClaude(raw, courseName) {
   try {
-    const https = require('https');
-
-    // Trim to keep costs low — 8000 chars covers most API responses
+    const https   = require('https');
     const trimmed = raw.substring(0, 8000);
-
-    const prompt = `You are extracting golf tee time data from a booking system API response.
+    const prompt  = `You are extracting golf tee time data from a booking system API response.
 
 Course: ${courseName}
 
@@ -376,18 +419,15 @@ Rules:
 
     const response = JSON.parse(text);
     if (!response.content || !response.content[0]) return null;
-
     const raw2  = response.content[0].text.trim();
     const clean = raw2.replace(/```json|```/g, '').trim();
     const times = JSON.parse(clean);
-
     if (!Array.isArray(times)) return null;
     return times.map(t => ({
       time:  t.time  || null,
       spots: t.spots !== undefined ? t.spots : null,
       price: t.price !== undefined ? t.price : null
     })).filter(t => t.time);
-
   } catch (e) {
     console.log(`  Claude API error: ${e.message}`);
     return null;
