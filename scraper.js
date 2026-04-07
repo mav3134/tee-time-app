@@ -165,35 +165,29 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
 if (/teewire\.net/i.test(course.url) && dateStr) {
   try {
     const [y, m, d] = dateStr.split('-');
-    const targetDay = parseInt(d);
-    const targetMonth = parseInt(m) - 1; // JS months are 0-indexed
-    const targetYear = parseInt(y);
+    const targetDay   = parseInt(d);
+    const targetMonth = parseInt(m) - 1;
+    const targetYear  = parseInt(y);
 
-    // datepaginator renders date items as li elements with data-moment attribute
-    // Format is typically unix timestamp or date string
     const clicked = await page.evaluate(({ targetDay, targetMonth, targetYear }) => {
-      // Try data-moment attribute (unix timestamp)
-      const items = document.querySelectorAll('li[data-moment], .dp-item[data-moment], [data-moment]');
-      for (const item of items) {
-        const ts = parseInt(item.getAttribute('data-moment'));
+      // datepaginator uses data-moment with unix timestamps in milliseconds
+      const allEls = document.querySelectorAll('[data-moment]');
+      for (const el of allEls) {
+        const ts = parseInt(el.getAttribute('data-moment'));
         if (!isNaN(ts)) {
-          const d = new Date(ts);
-          if (d.getDate() === targetDay && d.getMonth() === targetMonth && d.getFullYear() === targetYear) {
-            item.click();
-            return `clicked data-moment: ${item.getAttribute('data-moment')}`;
+          const date = new Date(ts);
+          if (date.getDate() === targetDay && date.getMonth() === targetMonth && date.getFullYear() === targetYear) {
+            el.click();
+            return `clicked: ${el.getAttribute('data-moment')}`;
           }
         }
       }
-      // Try elements containing just the day number
-      const allItems = document.querySelectorAll('.dp-item, li.active, .datepaginator li, [class*="dp-"]');
-const sample = Array.from(allItems).slice(0, 3).map(el => ({
-  text: el.textContent.trim().substring(0, 30),
-  attrs: Array.from(el.attributes).map(a => `${a.name}="${a.value}"`).join(' ')
-}));
-return JSON.stringify(sample);
+      // Log all data-moment values to see format
+      const moments = Array.from(allEls).slice(0, 5).map(el => el.getAttribute('data-moment'));
+      return `no match, sample data-moments: ${JSON.stringify(moments)}`;
     }, { targetDay, targetMonth, targetYear });
 
-    console.log(`  [${course.name}] TeeWire date click: ${clicked}`);
+    console.log(`  [${course.name}] TeeWire: ${clicked}`);
     await page.waitForTimeout(3000);
   } catch (e) {
     console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
