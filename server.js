@@ -52,6 +52,17 @@ app.delete('/api/courses/:id', (req, res) => {
   res.json({ success: true });
 });
 
+app.patch('/api/courses/:id', (req, res) => {
+  const { name, url } = req.body;
+  const courses = readCourses();
+  const course  = courses.find(c => c.id === parseInt(req.params.id));
+  if (!course) return res.status(404).json({ error: 'Course not found' });
+  if (name) course.name = name.trim();
+  if (url)  course.url  = url.trim();
+  writeCourses(courses);
+  res.json(course);
+});
+
 // ── States API ────────────────────────────────────────────────
 
 const STATES_FILE = path.join(DATA_DIR, 'states.json');
