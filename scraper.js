@@ -242,7 +242,10 @@ if (courseEl) {
         }
       }
     }
-
+if (isWebTrac) {
+  const pageSnippet = await page.evaluate(() => document.body.innerText.substring(0, 500));
+  console.log(`  [${course.name}] WebTrac page after search: ${pageSnippet}`);
+}
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
     console.log(`  [${course.name}] Text scrape found ${teeTimes.length} times`);
     await browser.close();
