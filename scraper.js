@@ -179,6 +179,14 @@ if (/teewire\.net/i.test(course.url) && dateStr) {
     console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
   }
 }
+    if (/myvscloud\.com/i.test(course.url)) {
+  const formFields = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll('select, input[type="text"]')).map(el => ({
+      tag: el.tagName, name: el.name, id: el.id, type: el.type
+    }));
+  });
+  console.log(`  [${course.name}] WebTrac fields: ${JSON.stringify(formFields)}`);
+}
     // WebTrac (myvscloud): fill search form and click Search
 if (/myvscloud\.com/i.test(course.url) && dateStr) {
   try {
