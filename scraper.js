@@ -16,6 +16,8 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const isForeUp      = /foreupsoftware\.com/i.test(course.url);
   const isForeUpIndex = isForeUp && /\/booking\/\d+/.test(course.url);
   const isTeesnap     = /teesnap\.net/i.test(course.url);
+  const isTeeWire     = /teewire\.net/i.test(course.url);
+  const isWebTrac     = /myvscloud\.com/i.test(course.url);
 
   page.on('request', (request) => {
     const url = request.url();
@@ -42,7 +44,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (!contentType.includes('json') && !contentType.includes('text/plain')) return;
       const text = await response.text();
       if (!text || text.length < 30) return;
-      if (url.includes('foreupsoftware.com') || url.includes('teesnap.net')) {
+      if (url.includes('foreupsoftware.com') || url.includes('teesnap.net') || url.includes('myvscloud.com')) {
         interceptedResponses.push({ url, text });
       } else if (/\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
         interceptedResponses.push({ url, text });
@@ -57,10 +59,9 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
     const waitMs = (isForeUp || isTeesnap) ? 10000 : 6000;
     await page.waitForTimeout(waitMs);
 
-    // foreUP index pages: select facility from dropdown then click Public
+    // ── foreUP index pages: select facility + click Public ────
     if (isForeUpIndex) {
       try {
-        // Try to match any word from the course name against dropdown options
         try {
           const select = page.locator('select').first();
           if (await select.isVisible({ timeout: 3000 })) {
@@ -83,8 +84,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         } catch (e) {
           console.log(`  [${course.name}] Dropdown selection skipped: ${e.message.substring(0, 80)}`);
         }
-
-        // Click the Public button
         const publicBtn = page.locator('button:has-text("Public"), a:has-text("Public"), input[value="Public"]').first();
         if (await publicBtn.isVisible({ timeout: 5000 })) {
           await publicBtn.click();
@@ -93,6 +92,81 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         }
       } catch (e) {
         console.log(`  [${course.name}] Interaction error: ${e.message.substring(0, 100)}`);
+      }
+    }
+
+    // ── TeeWire: click the target date in datepaginator ───────
+    if (isTeeWire && dateStr) {
+      try {
+        const clicked = await page.evaluate((targetDate) => {
+          const el = document.querySelector(`[data-moment="${targetDate}"]`);
+          if (el) { el.click(); return `clicked ${targetDate}`; }
+          return `date ${targetDate} not found in paginator`;
+        }, dateStr);
+        console.log(`  [${course.name}] TeeWire: ${clicked}`);
+        await page.waitForTimeout(3000);
+      } catch (e) {
+        console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
+      }
+    }
+
+    // ── WebTrac: fill search form and click Search ────────────
+    if (isWebTrac && dateStr) {
+      try {
+        const [y, m, d] = dateStr.split('-');
+        const fDate = `${m}/${d}/${y}`;
+
+        const dateField = page.locator('input[name="begindate"]').first();
+        if (await dateField.isVisible({ timeout: 5000 })) {
+          await dateField.fill(fDate);
+          console.log(`  [${course.name}] WebTrac: set date to ${fDate}`);
+        }
+
+        const timeField = page.locator('input[name="begintime"]').first();
+        if (await timeField.isVisible({ timeout: 3000 })) {
+          await timeField.fill('6:45 AM');
+          console.log(`  [${course.name}] WebTrac: set begin time to 6:45 AM`);
+        }
+
+        const courseSelect = page.locator('select[name="secondarycode"]').first();
+        if (await courseSelect.isVisible({ timeout: 3000 })) {
+          const optionData = await courseSelect.evaluate(el =>
+            Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+          );
+          console.log(`  [${course.name}] WebTrac course options: ${optionData.map(o => o.text).join(', ')}`);
+          const words = course.name.split(/\s+/).reverse();
+          for (const word of words) {
+            if (word.length < 2) continue;
+            const opt = optionData.find(o => o.text.toLowerCase().includes(word.toLowerCase()));
+            if (opt) {
+              await courseSelect.selectOption({ value: opt.value });
+              console.log(`  [${course.name}] WebTrac: selected course "${opt.text}"`);
+              break;
+            }
+          }
+        }
+
+        const holesSelect = page.locator('select[name="numberofholes"]').first();
+        if (await holesSelect.isVisible({ timeout: 3000 })) {
+          const holesOptions = await holesSelect.evaluate(el =>
+            Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+          );
+          console.log(`  [${course.name}] WebTrac holes options: ${holesOptions.map(o => o.text).join(', ')}`);
+          const nineOpt = holesOptions.find(o => o.text.includes('9'));
+          if (nineOpt) {
+            await holesSelect.selectOption({ value: nineOpt.value });
+            console.log(`  [${course.name}] WebTrac: selected 9 holes`);
+          }
+        }
+
+        const searchBtn = page.locator('input[value="Search"], button:has-text("Search"), input[type="submit"]').first();
+        if (await searchBtn.isVisible({ timeout: 5000 })) {
+          await searchBtn.click();
+          console.log(`  [${course.name}] WebTrac: clicked Search`);
+          await page.waitForTimeout(6000);
+        }
+      } catch (e) {
+        console.log(`  [${course.name}] WebTrac interaction error: ${e.message.substring(0, 80)}`);
       }
     }
 
@@ -114,32 +188,18 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       const correctedUrl = buildApiUrl(apiBaseUrl, dateStr, isForeUp);
       console.log(`  [${course.name}] Re-firing API: ${correctedUrl.substring(0, 120)}`);
       try {
-        const response = await context.request.fetch(correctedUrl, {
-          headers: apiRequestHeaders || {}
-        });
+        const response = await context.request.fetch(correctedUrl, { headers: apiRequestHeaders || {} });
         if (response.ok()) {
           const refiredText = await response.text();
           console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 300)}`);
           const kennaTimes = parseKennaJson(refiredText, course.name, facilityMap, filterByName);
-          if (kennaTimes !== null && kennaTimes.length > 0) {
-            console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`);
-            await browser.close(); return kennaTimes;
-          }
+          if (kennaTimes !== null && kennaTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`); await browser.close(); return kennaTimes; }
           const foreUpTimes = parseForeUpJson(refiredText);
-          if (foreUpTimes !== null && foreUpTimes.length > 0) {
-            console.log(`  [${course.name}] ✓ Found ${foreUpTimes.length} times (foreUP)`);
-            await browser.close(); return foreUpTimes;
-          }
+          if (foreUpTimes !== null && foreUpTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${foreUpTimes.length} times (foreUP)`); await browser.close(); return foreUpTimes; }
           const teesnapTimes = parseTeesnapJson(refiredText);
-          if (teesnapTimes !== null && teesnapTimes.length > 0) {
-            console.log(`  [${course.name}] ✓ Found ${teesnapTimes.length} times (Teesnap)`);
-            await browser.close(); return teesnapTimes;
-          }
+          if (teesnapTimes !== null && teesnapTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${teesnapTimes.length} times (Teesnap)`); await browser.close(); return teesnapTimes; }
           const genericTimes = parseGenericJson(refiredText, filterByName ? course.name : null);
-          if (genericTimes !== null && genericTimes.length > 0) {
-            console.log(`  [${course.name}] ✓ Found ${genericTimes.length} times (generic)`);
-            await browser.close(); return genericTimes;
-          }
+          if (genericTimes !== null && genericTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${genericTimes.length} times (generic)`); await browser.close(); return genericTimes; }
           console.log(`  [${course.name}] Parsed 0 from re-fire`);
         } else {
           console.log(`  [${course.name}] Re-fire HTTP ${response.status()}`);
@@ -161,97 +221,8 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
       if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
     }
-// TeeWire: uses datepaginator with data-moment="YYYY-MM-DD"
-if (/teewire\.net/i.test(course.url) && dateStr) {
-  try {
-    const clicked = await page.evaluate((targetDate) => {
-      const el = document.querySelector(`[data-moment="${targetDate}"]`);
-      if (el) {
-        el.click();
-        return `clicked ${targetDate}`;
-      }
-      return `date ${targetDate} not found in paginator`;
-    }, dateStr);
 
-    console.log(`  [${course.name}] TeeWire: ${clicked}`);
-    await page.waitForTimeout(3000);
-  } catch (e) {
-    console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
-  }
-}
-    if (/myvscloud\.com/i.test(course.url)) {
-  const formFields = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll('select, input[type="text"]')).map(el => ({
-      tag: el.tagName, name: el.name, id: el.id, type: el.type
-    }));
-  });
-  console.log(`  [${course.name}] WebTrac fields: ${JSON.stringify(formFields)}`);
-}
-   // WebTrac (myvscloud): fill search form and click Search
-if (/myvscloud\.com/i.test(course.url) && dateStr) {
-  try {
-    const [y, m, d] = dateStr.split('-');
-    const fDate = `${m}/${d}/${y}`;
-
-    // Set date
-    const dateField = page.locator('input[name="begindate"]').first();
-    if (await dateField.isVisible({ timeout: 5000 })) {
-      await dateField.fill(fDate);
-      console.log(`  [${course.name}] WebTrac: set date to ${fDate}`);
-    }
-
-    // Set begin time to 6:45 AM
-    const timeField = page.locator('input[name="begintime"]').first();
-    if (await timeField.isVisible({ timeout: 3000 })) {
-      await timeField.fill('6:45 AM');
-      console.log(`  [${course.name}] WebTrac: set begin time to 6:45 AM`);
-    }
-
-    // Select course from secondarycode dropdown
-    const courseSelect = page.locator('select[name="secondarycode"]').first();
-    if (await courseSelect.isVisible({ timeout: 3000 })) {
-      const optionData = await courseSelect.evaluate(el =>
-        Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
-      );
-      console.log(`  [${course.name}] WebTrac course options: ${optionData.map(o => o.text).join(', ')}`);
-      const words = course.name.split(/\s+/).reverse();
-      for (const word of words) {
-        if (word.length < 2) continue;
-        const opt = optionData.find(o => o.text.toLowerCase().includes(word.toLowerCase()));
-        if (opt) {
-          await courseSelect.selectOption({ value: opt.value });
-          console.log(`  [${course.name}] WebTrac: selected course "${opt.text}"`);
-          break;
-        }
-      }
-    }
-
-    // Set holes to 9
-    const holesSelect = page.locator('select[name="numberofholes"]').first();
-    if (await holesSelect.isVisible({ timeout: 3000 })) {
-      const holesOptions = await holesSelect.evaluate(el =>
-        Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
-      );
-      console.log(`  [${course.name}] WebTrac holes options: ${holesOptions.map(o => o.text).join(', ')}`);
-      const nineOpt = holesOptions.find(o => o.text.includes('9'));
-      if (nineOpt) {
-        await holesSelect.selectOption({ value: nineOpt.value });
-        console.log(`  [${course.name}] WebTrac: selected 9 holes`);
-      }
-    }
-
-    // Click Search
-    const searchBtn = page.locator('input[value="Search"], button:has-text("Search"), input[type="submit"]').first();
-    if (await searchBtn.isVisible({ timeout: 5000 })) {
-      await searchBtn.click();
-      console.log(`  [${course.name}] WebTrac: clicked Search`);
-      await page.waitForTimeout(5000);
-    }
-  } catch (e) {
-    console.log(`  [${course.name}] WebTrac interaction error: ${e.message.substring(0, 80)}`);
-  }
-}
-    // Claude AI fallback for unknown booking systems
+    // Claude AI fallback
     if (process.env.ANTHROPIC_API_KEY && interceptedResponses.length > 0) {
       console.log(`  [${course.name}] Trying Claude AI fallback...`);
       const candidate = interceptedResponses
@@ -459,7 +430,6 @@ async function parseWithClaude(raw, courseName) {
   try {
     const https   = require('https');
     const trimmed = raw.substring(0, 8000);
-console.log(`  Claude AI input preview: ${trimmed.substring(0, 400)}`);
     const prompt  = `You are extracting golf tee time data from a booking system API response.
 
 Course: ${courseName}
@@ -619,7 +589,6 @@ function extractSpots(ctx) {
 }
 
 function extractPrice(ctx) {
-  // Only match numbers directly preceded by $ to avoid picking up percentages, distances, etc.
   const re = /\$\s*(\d+(?:\.\d{1,2})?)/g;
   let highest = null;
   let m;
