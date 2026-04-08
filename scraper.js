@@ -295,7 +295,11 @@ function buildApiUrl(url, dateStr, isForeUp) {
   if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + dateStr);
   return url + (url.includes('?') ? '&' : '?') + 'date=' + dateStr;
 }
-
+if (isWebTrac) {
+  const bodyText = await page.evaluate(() => document.body.innerText);
+  const allTimes = bodyText.match(/\d{1,2}:\d{2}\s*(AM|PM)/gi);
+  console.log(`  [${course.name}] All times on page: ${allTimes?.join(', ')}`);
+}
 async function extractTeeTimes(page, originalUrl, courseName) {
   const bodyText = await page.evaluate(() => document.body.innerText);
   if (bodyText.trim().startsWith('[') || bodyText.trim().startsWith('{')) {
