@@ -110,70 +110,65 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       }
     }
 
-    // WebTrac: set form values via JavaScript and submit
-if (isWebTrac && dateStr) {
-  try {
-    const [y, m, d] = dateStr.split('-');
-    const fDate = `${m}/${d}/${y}`;
+    // ── WebTrac: fill search form and click Search ────────────
+    if (isWebTrac && dateStr) {
+      try {
+        const [y, m, d] = dateStr.split('-');
+        const fDate = `${m}/${d}/${y}`;
 
-    const result = await page.evaluate(({ fDate, courseName }) => {
-      const log = [];
+        const dateField = page.locator('input[name="begindate"]').first();
+        if (await dateField.isVisible({ timeout: 5000 })) {
+          await dateField.fill(fDate);
+          console.log(`  [${course.name}] WebTrac: set date to ${fDate}`);
+        }
 
-      // Set date
-      const dateEl = document.querySelector('input[name="begindate"]');
-      if (dateEl) { dateEl.value = fDate; dateEl.dispatchEvent(new Event('change')); log.push(`date=${fDate}`); }
+        const timeField = page.locator('input[name="begintime"]').first();
+        if (await timeField.isVisible({ timeout: 3000 })) {
+          await timeField.fill('6:45 AM');
+          console.log(`  [${course.name}] WebTrac: set begin time to 6:45 AM`);
+        }
 
-      // Set time to earliest option or 6:45 AM
-      const timeEl = document.querySelector('input[name="begintime"]');
-      if (timeEl) { timeEl.value = '6:45 am'; timeEl.dispatchEvent(new Event('change')); log.push('time=6:45am'); }
+        const courseSelect = page.locator('select[name="secondarycode"]').first();
+        if (await courseSelect.isVisible({ timeout: 3000 })) {
+          const optionData = await courseSelect.evaluate(el =>
+            Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+          );
+          console.log(`  [${course.name}] WebTrac course options: ${optionData.map(o => o.text).join(', ')}`);
+          const words = course.name.split(/\s+/).reverse();
+          for (const word of words) {
+            if (word.length < 2) continue;
+            const opt = optionData.find(o => o.text.toLowerCase().includes(word.toLowerCase()));
+            if (opt) {
+              await courseSelect.selectOption({ value: opt.value });
+              console.log(`  [${course.name}] WebTrac: selected course "${opt.text}"`);
+              break;
+            }
+          }
+        }
 
-     // Select course by matching name words — try longer matches first
-const courseEl = document.querySelector('select[name="secondarycode"]');
-if (courseEl) {
-  const words = courseName.split(/\s+/);
-  const options = Array.from(courseEl.options);
-  let matched = false;
-  
-  // Try matching progressively fewer words from the end
-  for (let len = words.length; len >= 1; len--) {
-    const phrase = words.slice(-len).join(' ');
-    if (phrase.length < 3) continue;
-    const opt = options.find(o => o.text.trim().toLowerCase().includes(phrase.toLowerCase()));
-    if (opt) {
-      courseEl.value = opt.value;
-      courseEl.dispatchEvent(new Event('change'));
-      log.push(`course=${opt.text.trim()}`);
-      matched = true;
-      break;
-    }
-  }
-  if (!matched) log.push(`course=no match (options: ${options.map(o=>o.text.trim()).join(',')})`);
-}
+        const holesSelect = page.locator('select[name="numberofholes"]').first();
+        if (await holesSelect.isVisible({ timeout: 3000 })) {
+          const holesOptions = await holesSelect.evaluate(el =>
+            Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+          );
+          console.log(`  [${course.name}] WebTrac holes options: ${holesOptions.map(o => o.text).join(', ')}`);
+          const nineOpt = holesOptions.find(o => o.text.includes('9'));
+          if (nineOpt) {
+            await holesSelect.selectOption({ value: nineOpt.value });
+            console.log(`  [${course.name}] WebTrac: selected 9 holes`);
+          }
+        }
 
-      // Set holes to 9
-      const holesEl = document.querySelector('select[name="numberofholes"]');
-      if (holesEl) {
-        const nineOpt = Array.from(holesEl.options).find(o => o.text.includes('9'));
-        if (nineOpt) { holesEl.value = nineOpt.value; holesEl.dispatchEvent(new Event('change')); log.push('holes=9'); }
+        const searchBtn = page.locator('input[value="Search"], button:has-text("Search"), input[type="submit"]').first();
+        if (await searchBtn.isVisible({ timeout: 5000 })) {
+          await searchBtn.click();
+          console.log(`  [${course.name}] WebTrac: clicked Search`);
+          await page.waitForTimeout(6000);
+        }
+      } catch (e) {
+        console.log(`  [${course.name}] WebTrac interaction error: ${e.message.substring(0, 80)}`);
       }
-
-      return log.join(', ');
-    }, { fDate, courseName: course.name });
-
-    console.log(`  [${course.name}] WebTrac set: ${result}`);
-    await page.waitForTimeout(500);
-
-    // Click Search
-    const searchBtn = page.locator('input[value="Search"], button:has-text("Search"), input[type="submit"]').first();
-    if (await searchBtn.isVisible({ timeout: 5000 })) {
-      await searchBtn.click();
-      console.log(`  [${course.name}] WebTrac: clicked Search`);
-      await page.waitForTimeout(8000);
     }
-  } catch (e) {
-    console.log(`  [${course.name}] WebTrac interaction error: ${e.message.substring(0, 80)}`);
-  }
-}
 
     console.log(`  [${course.name}] Intercepted ${interceptedResponses.length} responses`);
 
@@ -242,10 +237,7 @@ if (courseEl) {
         }
       }
     }
-if (isWebTrac) {
-  const pageSnippet = await page.evaluate(() => document.body.innerText.substring(0, 500));
-  console.log(`  [${course.name}] WebTrac page after search: ${pageSnippet}`);
-}
+
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
     console.log(`  [${course.name}] Text scrape found ${teeTimes.length} times`);
     await browser.close();
@@ -295,11 +287,7 @@ function buildApiUrl(url, dateStr, isForeUp) {
   if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + dateStr);
   return url + (url.includes('?') ? '&' : '?') + 'date=' + dateStr;
 }
-if (isWebTrac) {
-  const bodyText = await page.evaluate(() => document.body.innerText);
-  const allTimes = bodyText.match(/\d{1,2}:\d{2}\s*(AM|PM)/gi);
-  console.log(`  [${course.name}] All times on page: ${allTimes?.join(', ')}`);
-}
+
 async function extractTeeTimes(page, originalUrl, courseName) {
   const bodyText = await page.evaluate(() => document.body.innerText);
   if (bodyText.trim().startsWith('[') || bodyText.trim().startsWith('{')) {
