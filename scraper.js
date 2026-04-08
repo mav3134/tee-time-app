@@ -161,9 +161,17 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
 
         const searchBtn = page.locator('input[value="Search"], button:has-text("Search"), input[type="submit"]').first();
         if (await searchBtn.isVisible({ timeout: 5000 })) {
+          // Debug: check what values are actually set before clicking Search
+const formValues = await page.evaluate(() => ({
+  date:   document.querySelector('input[name="begindate"]')?.value,
+  time:   document.querySelector('input[name="begintime"]')?.value,
+  course: document.querySelector('select[name="secondarycode"]')?.value,
+  holes:  document.querySelector('select[name="numberofholes"]')?.value,
+}));
+console.log(`  [${course.name}] WebTrac form values before Search: ${JSON.stringify(formValues)}`);
           await searchBtn.click();
           console.log(`  [${course.name}] WebTrac: clicked Search`);
-          await page.waitForTimeout(6000);
+          await page.waitForTimeout(8000);
         }
       } catch (e) {
         console.log(`  [${course.name}] WebTrac interaction error: ${e.message.substring(0, 80)}`);
