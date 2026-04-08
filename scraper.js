@@ -179,6 +179,76 @@ if (/teewire\.net/i.test(course.url) && dateStr) {
     console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
   }
 }
+    // WebTrac (myvscloud): fill search form and click Search
+if (/myvscloud\.com/i.test(course.url) && dateStr) {
+  try {
+    const [y, m, d] = dateStr.split('-');
+    const fDate = `${m}/${d}/${y}`;
+
+    // Set date
+    const dateField = page.locator('input[name="begindate"], input[id*="date"], input[name*="date"]').first();
+    if (await dateField.isVisible({ timeout: 5000 })) {
+      await dateField.fill(fDate);
+      console.log(`  [${course.name}] WebTrac: set date to ${fDate}`);
+    }
+
+    // Select course from dropdown — match course name words same as foreUP
+    const courseSelect = page.locator('select[name*="course"], select[id*="course"], select[name="secondarycode"]').first();
+    if (await courseSelect.isVisible({ timeout: 3000 })) {
+      const optionData = await courseSelect.evaluate(el =>
+        Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+      );
+      console.log(`  [${course.name}] WebTrac course options: ${optionData.map(o => o.text).join(', ')}`);
+      const words = course.name.split(/\s+/).reverse();
+      for (const word of words) {
+        if (word.length < 2) continue;
+        const opt = optionData.find(o => o.text.toLowerCase().includes(word.toLowerCase()));
+        if (opt) {
+          await courseSelect.selectOption({ value: opt.value });
+          console.log(`  [${course.name}] WebTrac: selected course "${opt.text}"`);
+          break;
+        }
+      }
+    }
+
+    // Set begin time to earliest (6:45 AM)
+    const timeSelect = page.locator('select[name*="time"], select[id*="time"], select[name="begintime"]').first();
+    if (await timeSelect.isVisible({ timeout: 3000 })) {
+      const timeOptions = await timeSelect.evaluate(el =>
+        Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+      );
+      // Pick earliest available time option
+      if (timeOptions.length > 0) {
+        await timeSelect.selectOption({ value: timeOptions[1]?.value || timeOptions[0].value });
+        console.log(`  [${course.name}] WebTrac: set begin time`);
+      }
+    }
+
+    // Set holes to 9
+    const holesSelect = page.locator('select[name*="hole"], select[id*="hole"], select[name="numberofholes"]').first();
+    if (await holesSelect.isVisible({ timeout: 3000 })) {
+      const holesOptions = await holesSelect.evaluate(el =>
+        Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
+      );
+      console.log(`  [${course.name}] WebTrac holes options: ${holesOptions.map(o => o.text).join(', ')}`);
+      const nineOpt = holesOptions.find(o => o.text.includes('9'));
+      if (nineOpt) {
+        await holesSelect.selectOption({ value: nineOpt.value });
+        console.log(`  [${course.name}] WebTrac: selected 9 holes`);
+      }
+    }
+
+    // Click Search
+    const searchBtn = page.locator('input[value="Search"], button:has-text("Search"), input[type="submit"]').first();
+    if (await searchBtn.isVisible({ timeout: 5000 })) {
+      await searchBtn.click();
+      console.log(`  [${course.name}] WebTrac: clicked Search`);
+      await page.waitForTimeout(5000);
+    }
+  } catch (e) {
+    console.log(`  [${course.name}] WebTrac interaction error: ${e.message.substring(0, 80)}`);
+  }
+}
     // Claude AI fallback for unknown booking systems
     if (process.env.ANTHROPIC_API_KEY && interceptedResponses.length > 0) {
       console.log(`  [${course.name}] Trying Claude AI fallback...`);
