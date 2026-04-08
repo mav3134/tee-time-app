@@ -187,21 +187,28 @@ if (/teewire\.net/i.test(course.url) && dateStr) {
   });
   console.log(`  [${course.name}] WebTrac fields: ${JSON.stringify(formFields)}`);
 }
-    // WebTrac (myvscloud): fill search form and click Search
+   // WebTrac (myvscloud): fill search form and click Search
 if (/myvscloud\.com/i.test(course.url) && dateStr) {
   try {
     const [y, m, d] = dateStr.split('-');
     const fDate = `${m}/${d}/${y}`;
 
     // Set date
-    const dateField = page.locator('input[name="begindate"], input[id*="date"], input[name*="date"]').first();
+    const dateField = page.locator('input[name="begindate"]').first();
     if (await dateField.isVisible({ timeout: 5000 })) {
       await dateField.fill(fDate);
       console.log(`  [${course.name}] WebTrac: set date to ${fDate}`);
     }
 
-    // Select course from dropdown — match course name words same as foreUP
-    const courseSelect = page.locator('select[name*="course"], select[id*="course"], select[name="secondarycode"]').first();
+    // Set begin time to 6:45 AM
+    const timeField = page.locator('input[name="begintime"]').first();
+    if (await timeField.isVisible({ timeout: 3000 })) {
+      await timeField.fill('6:45 AM');
+      console.log(`  [${course.name}] WebTrac: set begin time to 6:45 AM`);
+    }
+
+    // Select course from secondarycode dropdown
+    const courseSelect = page.locator('select[name="secondarycode"]').first();
     if (await courseSelect.isVisible({ timeout: 3000 })) {
       const optionData = await courseSelect.evaluate(el =>
         Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
@@ -219,21 +226,8 @@ if (/myvscloud\.com/i.test(course.url) && dateStr) {
       }
     }
 
-    // Set begin time to earliest (6:45 AM)
-    const timeSelect = page.locator('select[name*="time"], select[id*="time"], select[name="begintime"]').first();
-    if (await timeSelect.isVisible({ timeout: 3000 })) {
-      const timeOptions = await timeSelect.evaluate(el =>
-        Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
-      );
-      // Pick earliest available time option
-      if (timeOptions.length > 0) {
-        await timeSelect.selectOption({ value: timeOptions[1]?.value || timeOptions[0].value });
-        console.log(`  [${course.name}] WebTrac: set begin time`);
-      }
-    }
-
     // Set holes to 9
-    const holesSelect = page.locator('select[name*="hole"], select[id*="hole"], select[name="numberofholes"]').first();
+    const holesSelect = page.locator('select[name="numberofholes"]').first();
     if (await holesSelect.isVisible({ timeout: 3000 })) {
       const holesOptions = await holesSelect.evaluate(el =>
         Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
