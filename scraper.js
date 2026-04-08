@@ -127,24 +127,28 @@ if (isWebTrac && dateStr) {
       const timeEl = document.querySelector('input[name="begintime"]');
       if (timeEl) { timeEl.value = '6:45 am'; timeEl.dispatchEvent(new Event('change')); log.push('time=6:45am'); }
 
-      // Select course by matching name words
-      const courseEl = document.querySelector('select[name="secondarycode"]');
-      if (courseEl) {
-        const words = courseName.split(/\s+/).reverse();
-        let matched = false;
-        for (const word of words) {
-          if (word.length < 2) continue;
-          const opt = Array.from(courseEl.options).find(o => o.text.trim().toLowerCase().includes(word.toLowerCase()));
-          if (opt) {
-            courseEl.value = opt.value;
-            courseEl.dispatchEvent(new Event('change'));
-            log.push(`course=${opt.text.trim()}`);
-            matched = true;
-            break;
-          }
-        }
-        if (!matched) log.push(`course=no match (options: ${Array.from(courseEl.options).map(o=>o.text.trim()).join(',')})`);
-      }
+     // Select course by matching name words — try longer matches first
+const courseEl = document.querySelector('select[name="secondarycode"]');
+if (courseEl) {
+  const words = courseName.split(/\s+/);
+  const options = Array.from(courseEl.options);
+  let matched = false;
+  
+  // Try matching progressively fewer words from the end
+  for (let len = words.length; len >= 1; len--) {
+    const phrase = words.slice(-len).join(' ');
+    if (phrase.length < 3) continue;
+    const opt = options.find(o => o.text.trim().toLowerCase().includes(phrase.toLowerCase()));
+    if (opt) {
+      courseEl.value = opt.value;
+      courseEl.dispatchEvent(new Event('change'));
+      log.push(`course=${opt.text.trim()}`);
+      matched = true;
+      break;
+    }
+  }
+  if (!matched) log.push(`course=no match (options: ${options.map(o=>o.text.trim()).join(',')})`);
+}
 
       // Set holes to 9
       const holesEl = document.querySelector('select[name="numberofholes"]');
