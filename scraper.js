@@ -44,7 +44,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (!contentType.includes('json') && !contentType.includes('text/plain')) return;
       const text = await response.text();
       if (!text || text.length < 30) return;
-      if (url.includes('foreupsoftware.com') || url.includes('teesnap.net') || url.includes('myvscloud.com')) {
+      if (url.includes('foreupsoftware.com') || url.includes('teesnap.net') || url.includes('myvscloud.com') || url.includes('clubcaddie.com')) {
         interceptedResponses.push({ url, text });
       } else if (/\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
         interceptedResponses.push({ url, text });
