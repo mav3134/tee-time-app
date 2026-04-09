@@ -251,12 +251,14 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
 
 function buildUrl(url, dateStr) {
   if (!dateStr) return url;
-  if (/clubcaddie\.com/i.test(url)) {
-    const [y, m, d] = dateStr.split('-');
-    const encoded = encodeURIComponent(`${m}/${d}/${y}`);
-    if (url.includes('date=')) return url.replace(/date=[^&]*/i, 'date=' + encoded);
-    return url + (url.includes('?') ? '&' : '?') + 'date=' + encoded;
-  }
+ if (/clubcaddie\.com/i.test(url)) {
+  const [y, m, d] = dateStr.split('-');
+  const newDate = encodeURIComponent(`${m}/${d}/${y}`);
+  // Replace date= whether it's encoded or not
+  const decoded = decodeURIComponent(url);
+  const replaced = decoded.replace(/date=[^&]*/i, `date=${m}/${d}/${y}`);
+  return replaced.replace(/date=(\d{2})\/(\d{2})\/(\d{4})/g, (_, m, d, y) => `date=${encodeURIComponent(`${m}/${d}/${y}`)}`);
+}
   if (/foreup/i.test(url)) {
     const [y, m, d] = dateStr.split('-');
     const fDate   = `${m}-${d}-${y}`;
