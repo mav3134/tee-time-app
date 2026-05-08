@@ -1,1758 +1,665 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Render Studio</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>⛳ Tee Time Finder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg:        #05050A;
-    --surface:   #09090F;
-    --surface2:  #0F0F18;
-    --surface3:  #16161F;
-    --platinum:  #C2BAA8;
-    --platinum2: #E0D8C8;
-    --text:      #EDE8DF;
-    --muted:     #908880;
-    --muted2:    #B0A898;
-    --border:    rgba(194,186,168,0.10);
-    --border2:   rgba(194,186,168,0.20);
-    --border3:   rgba(194,186,168,0.30);
-    --success:   #8FBA7A;
-    --error:     #BA7A7A;
-    --warn:      #BAA06A;
-    --radius-s:  3px;
-    --radius:    4px;
-  }
-
-  body {
-    font-family: 'Jost', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 0;
-    /* Subtle noise texture */
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-  }
-
-  .shell {
-    width: 100%;
-    max-width: 1200px;
-    padding: 0 32px 64px;
-  }
-
-  /* ── Masthead ─────────────────────────────────────────────────────────────── */
-  .masthead {
-    padding: 48px 0 36px;
-    border-bottom: 1px solid var(--border2);
-    margin-bottom: 40px;
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 24px;
-  }
-
-  .masthead-left {}
-
-  .studio-mark {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-
-  /* Three-line monogram / mark */
-  .mark-icon {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .mark-icon span {
-    display: block;
-    height: 1px;
-    background: var(--platinum);
-    transition: width 0.3s;
-  }
-  .mark-icon span:nth-child(1) { width: 22px; }
-  .mark-icon span:nth-child(2) { width: 14px; opacity: 0.6; }
-  .mark-icon span:nth-child(3) { width: 18px; opacity: 0.35; }
-
-  .studio-label {
-    font-size: 10px;
-    font-weight: 400;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--platinum);
-  }
-
-  h1 {
-    font-family: 'Cormorant Garamond', Georgia, serif;
-    font-size: 42px;
-    font-weight: 400;
-    letter-spacing: -0.01em;
-    line-height: 1;
-    color: var(--text);
-  }
-
-  h1 em {
-    font-style: italic;
-    color: var(--platinum);
-  }
-
-  .agent-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    color: var(--muted2);
-    text-transform: uppercase;
-    flex-shrink: 0;
-    padding-bottom: 4px;
-  }
-
-  .status-indicator {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: all 0.4s;
-  }
-  .agent-status.online { color: var(--success); }
-  .agent-status.online .status-indicator {
-    background: var(--success);
-    box-shadow: 0 0 8px var(--success);
-  }
-
-  /* ── Tabs ─────────────────────────────────────────────────────────────────── */
-  .tab-bar {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--border2);
-    margin-bottom: 36px;
-  }
-
-  .tab-btn {
-    position: relative;
-    padding: 0 0 14px;
-    margin-right: 36px;
-    background: transparent;
-    border: none;
-    color: var(--muted2);
-    font-family: 'Jost', sans-serif;
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: color 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .tab-btn::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0; right: 0;
-    height: 1px;
-    background: var(--platinum);
-    transform: scaleX(0);
-    transition: transform 0.25s ease;
-  }
-
-  .tab-btn.active { color: var(--platinum2); }
-  .tab-btn.active::after { transform: scaleX(1); }
-  .tab-btn:hover { color: var(--muted2); }
-
-  .tab-count {
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.05em;
-    background: rgba(194,186,168,0.12);
-    color: var(--platinum);
-    padding: 2px 7px;
-    border-radius: 2px;
-    display: none;
-  }
-  .tab-count.show { display: block; }
-
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-
-  /* ── Section headers ──────────────────────────────────────────────────────── */
-  .section-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-  }
-
-  .section-label {
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
-    color: var(--muted2);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .section-label::before {
-    content: '';
-    display: block;
-    width: 20px;
-    height: 1px;
-    background: var(--muted);
-    opacity: 0.5;
-  }
-
-  /* ── Two-column grid ──────────────────────────────────────────────────────── */
-  .columns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-  @media (max-width: 600px) { .columns { grid-template-columns: 1fr; } }
-
-  /* ── Panel containers ─────────────────────────────────────────────────────── */
-  .panel {
-    border: 1px solid var(--border2);
-    border-radius: var(--radius);
-    overflow: hidden;
-  }
-
-  .panel-header {
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border2);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--surface2);
-  }
-
-  .panel-title {
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--muted2);
-  }
-
-  .panel-subtitle {
-    font-size: 11px;
-    color: var(--platinum);
-    font-weight: 400;
-    letter-spacing: 0.04em;
-  }
-
-  .panel-body { padding: 6px 0; background: var(--surface); }
-
-  /* ── Video rows ───────────────────────────────────────────────────────────── */
-  .video-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--border);
-    transition: background 0.15s;
-    cursor: pointer;
-  }
-  .video-row:last-child { border-bottom: none; }
-  .video-row:hover { background: var(--surface2); }
-  .video-row.active { background: rgba(194,186,168,0.04); }
-
-  .v-checkbox {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    border: 1px solid var(--border3);
-    background: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-    cursor: pointer;
-  }
-  .video-row.selected .v-checkbox {
-    background: var(--platinum);
-    border-color: var(--platinum);
-  }
-  .v-check {
-    width: 8px;
-    height: 8px;
-    display: none;
-  }
-  .video-row.selected .v-check { display: block; }
-  .v-check::before {
-    content: '';
-    display: block;
-    width: 8px;
-    height: 5px;
-    border-left: 1px solid var(--bg);
-    border-bottom: 1px solid var(--bg);
-    transform: rotate(-45deg) translate(1px, -1px);
-  }
-
-  .video-name {
-    font-size: 13px;
-    font-weight: 400;
-    letter-spacing: 0.03em;
-    flex: 1;
-    transition: color 0.15s;
-  }
-  .video-row.active .video-name { color: var(--platinum2); }
-
-  .active-pip {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--platinum);
-    opacity: 0;
-    transition: opacity 0.2s;
-    flex-shrink: 0;
-  }
-  .video-row.active .active-pip { opacity: 1; }
-
-  /* ── Company rows ─────────────────────────────────────────────────────────── */
-  .company-row {
-    border-bottom: 1px solid var(--border);
-    transition: background 0.12s;
-  }
-  .company-row:last-child { border-bottom: none; }
-
-  .company-main {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 11px 18px;
-    cursor: pointer;
-    transition: background 0.12s;
-  }
-  .company-main:hover { background: var(--surface2); }
-
-  .c-checkbox {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    border: 1px solid var(--border3);
-    background: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-  }
-  .company-row.checked .c-checkbox {
-    background: var(--platinum);
-    border-color: var(--platinum);
-  }
-  .c-check {
-    width: 8px;
-    height: 8px;
-    display: none;
-  }
-  .company-row.checked .c-check { display: block; }
-  .c-check::before {
-    content: '';
-    display: block;
-    width: 8px;
-    height: 5px;
-    border-left: 1px solid var(--bg);
-    border-bottom: 1px solid var(--bg);
-    transform: rotate(-45deg) translate(1px, -1px);
-  }
-
-  .company-name {
-    font-size: 13px;
-    font-weight: 400;
-    letter-spacing: 0.03em;
-    flex: 1;
-  }
-
-  .swap-row {
-    display: none;
-    align-items: center;
-    gap: 14px;
-    flex-shrink: 0;
-  }
-  .company-row.checked .swap-row { display: flex; }
-
-  .swap-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    color: var(--muted2);
-    text-transform: uppercase;
-    transition: color 0.15s;
-  }
-  .swap-toggle:hover { color: var(--muted2); }
-  .swap-toggle.on { color: var(--platinum); }
-
-  .swap-pip {
-    width: 10px;
-    height: 10px;
-    border: 1px solid var(--border3);
-    transition: all 0.15s;
-  }
-  .swap-toggle.on .swap-pip {
-    background: var(--platinum);
-    border-color: var(--platinum);
-  }
-
-  .panel-actions {
-    padding: 10px 18px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--surface2);
-  }
-
-  .link-btn {
-    font-size: 10px;
-    font-weight: 400;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--muted2);
-    background: none;
-    border: none;
-    cursor: pointer;
-    transition: color 0.15s;
-    font-family: 'Jost', sans-serif;
-  }
-  .link-btn:hover { color: var(--platinum); }
-
-  .sel-count-label {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: var(--muted2);
-  }
-
-  /* ── Format selector ─────────────────────────────────────────────────────── */
-  .format-bar {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    padding: 18px 0;
-    border-top: 1px solid var(--border2);
-    margin-top: 4px;
-  }
-
-  .format-label {
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--muted2);
-    flex-shrink: 0;
-  }
-
-  .format-options {
-    display: flex;
-    gap: 12px;
-  }
-
-  .format-toggle {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    border: 1px solid var(--border2);
-    cursor: pointer;
-    transition: all 0.18s;
-    background: transparent;
-    width: 140px;
-    justify-content: flex-start;
-  }
-
-  .format-toggle:hover { border-color: var(--border3); }
-
-  .format-toggle.on {
-    border-color: var(--platinum);
-    background: rgba(194,186,168,0.04);
-  }
-
-  .fmt-pip {
-    width: 10px;
-    height: 10px;
-    border: 1px solid var(--border3);
-    flex-shrink: 0;
-    transition: all 0.15s;
-  }
-
-  .format-toggle.on .fmt-pip {
-    background: var(--platinum);
-    border-color: var(--platinum);
-  }
-
-  .fmt-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .fmt-name {
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    color: var(--muted2);
-    transition: color 0.15s;
-  }
-
-  .format-toggle.on .fmt-name { color: var(--platinum2); }
-
-  .fmt-desc {
-    font-size: 10px;
-    font-weight: 400;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-  }
-
-  /* ── Start Render button ──────────────────────────────────────────────────── */
-  .render-bar {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 24px 0 0;
-    border-top: 1px solid var(--border2);
-    margin-top: 4px;
-  }
-
-  .btn-start-render {
-    position: relative;
-    padding: 14px 48px;
-    background: transparent;
-    border: 1px solid var(--platinum);
-    color: var(--platinum);
-    font-family: 'Jost', sans-serif;
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.25s;
-    overflow: hidden;
-  }
-
-  .btn-start-render::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--platinum);
-    transform: translateX(-101%);
-    transition: transform 0.25s ease;
-  }
-
-  .btn-start-render:hover::before { transform: translateX(0); }
-  .btn-start-render:hover { color: var(--bg); }
-
-  .btn-start-render span { position: relative; z-index: 1; }
-
-  .btn-start-render:disabled {
-    border-color: var(--border3);
-    color: var(--muted2);
-    cursor: not-allowed;
-  }
-  .btn-start-render:disabled::before { display: none; }
-
-  .render-hint {
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.04em;
-    color: var(--muted2);
-  }
-
-  /* ── Render Queue ─────────────────────────────────────────────────────────── */
-  .queue-controls {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 28px;
-  }
-
-  .queue-stats {
-    display: flex;
-    gap: 24px;
-  }
-
-  .stat-item {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.06em;
-    color: var(--muted2);
-  }
-
-  .stat-bar {
-    width: 2px;
-    height: 14px;
-    border-radius: 1px;
-  }
-  .stat-bar.staged   { background: rgba(194,186,168,0.4); }
-  .stat-bar.pending  { background: var(--warn); opacity: 0.7; }
-  .stat-bar.running  { background: var(--platinum); }
-  .stat-bar.done     { background: var(--success); opacity: 0.7; }
-  .stat-bar.error    { background: var(--error); opacity: 0.7; }
-
-  .queue-btns { display: flex; gap: 12px; align-items: center; }
-
-  .btn-queue-action {
-    padding: 7px 16px;
-    background: transparent;
-    border: 1px solid var(--border3);
-    color: var(--muted2);
-    font-family: 'Jost', sans-serif;
-    font-size: 10px;
-    font-weight: 400;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.18s;
-  }
-  .btn-queue-action:hover { border-color: var(--platinum); color: var(--platinum); }
-  .btn-queue-action.pause-active {
-    border-color: var(--warn);
-    color: var(--warn);
-  }
-
-  /* Paused banner */
-  .pause-notice {
-    display: none;
-    padding: 12px 18px;
-    border: 1px solid rgba(158,138,90,0.25);
-    background: rgba(158,138,90,0.05);
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.06em;
-    color: var(--warn);
-    margin-bottom: 20px;
-  }
-  .pause-notice.show { display: block; }
-
-  /* Queue section headers */
-  .queue-section-head {
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--muted2);
-    padding: 16px 0 10px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  /* Job rows */
-  .job-row {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--border);
-    transition: opacity 0.2s;
-  }
-  .job-row:last-child { border-bottom: none; }
-  .job-row.faded { opacity: 0.45; }
-
-  .job-left { flex: 1; min-width: 0; }
-
-  .job-title {
-    font-size: 13px;
-    font-weight: 400;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 4px;
-  }
-
-  .job-arrow {
-    font-size: 10px;
-    color: var(--muted2);
-    margin: 0 6px;
-    opacity: 0.6;
-  }
-
-  .job-video-name { color: var(--platinum); }
-
-  .job-tags {
-    display: flex;
-    gap: 6px;
-  }
-
-  .job-tag {
-    font-size: 9px;
-    font-weight: 400;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted2);
-    border: 1px solid var(--border2);
-    padding: 2px 6px;
-  }
-
-  /* Status display */
-  .job-status {
-    font-size: 10px;
-    font-weight: 400;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    min-width: 90px;
-    justify-content: flex-end;
-  }
-  .job-status.staged   { color: rgba(194,186,168,0.5); }
-  .job-status.pending  { color: var(--warn); }
-  .job-status.rendering { color: var(--platinum); }
-  .job-status.done     { color: var(--success); }
-  .job-status.error    { color: var(--error); }
-
-  .render-spinner {
-    width: 10px;
-    height: 10px;
-    border: 1px solid rgba(194,186,168,0.2);
-    border-top-color: var(--platinum);
-    border-radius: 50%;
-    animation: spin 0.9s linear infinite;
-  }
+    --bg:       #f5f0e8;
+    --surface:  #fffdf7;
+    --border:   #d6cfbe;
+    --green:    #2d6a4f;
+    --green-lt: #d8f3dc;
+    --yellow-lt:#fef3e2;
+    --red-lt:   #fde8e8;
+    --text:     #1a1a18;
+    --muted:    #8a8272;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'IBM Plex Sans', sans-serif;
+    --display:  'Bebas Neue', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    background: var(--green); padding: 16px 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .header-left { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  h1 { font-family: var(--display); font-size: 32px; color: #fff; letter-spacing: 2px; line-height: 1; }
+  .tagline { font-family: var(--mono); font-size: 10px; color: #a8d5b5; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+
+  /* State selector */
+  .state-selector-wrap { display: flex; align-items: center; gap: 8px; }
+  .state-label { font-family: var(--mono); font-size: 10px; color: #a8d5b5; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+  .state-select {
+    background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.35);
+    color: #fff; font-family: var(--sans); font-weight: 600; font-size: 14px;
+    border-radius: 4px; padding: 7px 10px; outline: none; cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23a8d5b5' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    padding-right: 28px;
+  }
+  .state-select option { background: #2d6a4f; color: #fff; }
+  .state-select option.add-state-opt { color: #a8d5b5; font-style: italic; }
+
+  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .date-wrap {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.3);
+    border-radius: 4px; padding: 8px 12px;
+  }
+  .date-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; color: #a8d5b5; text-transform: uppercase; white-space: nowrap; }
+  input[type="date"] { background: transparent; border: none; color: #fff; font-family: var(--mono); font-size: 13px; outline: none; cursor: pointer; }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.7); cursor: pointer; }
+  .btn-refresh {
+    background: #fff; color: var(--green); font-family: var(--display); font-size: 18px;
+    letter-spacing: 1px; border: none; padding: 10px 28px; border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; transition: all 0.15s; flex-shrink: 0;
+  }
+  .btn-refresh:hover:not(:disabled) { background: #e8f5e9; transform: translateY(-1px); }
+  .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* ── Layout ── */
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 73px); }
+
+  aside {
+    background: var(--surface); border-right: 2px solid var(--border);
+    padding: 18px 14px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .section-title { font-family: var(--mono); font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .add-form { display: flex; flex-direction: column; gap: 7px; }
+  input[type="text"], input[type="url"] {
+    background: var(--bg); border: 1.5px solid var(--border); color: var(--text);
+    border-radius: 4px; padding: 7px 9px; font-family: var(--sans); font-size: 12px;
+    width: 100%; outline: none; transition: border-color 0.15s;
+  }
+  input:focus { border-color: var(--green); }
+  input::placeholder { color: var(--muted); }
+  .btn-add {
+    background: var(--green); color: #fff; font-family: var(--sans); font-weight: 600;
+    font-size: 12px; border: none; border-radius: 4px; padding: 8px; cursor: pointer; transition: background 0.15s;
+  }
+  .btn-add:hover { background: #235c42; }
+
+  .course-list { display: flex; flex-direction: column; gap: 4px; }
+  .course-item {
+    background: var(--bg); border: 1.5px solid var(--border); border-radius: 5px;
+    padding: 5px 8px; display: flex; align-items: center; gap: 6px;
+    animation: slideIn 0.2s ease; transition: opacity 0.2s;
+  }
+  .course-item.disabled { opacity: 0.4; }
+  @keyframes slideIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+  .ci-name { flex: 1; font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+  .toggle { position: relative; width: 30px; height: 18px; flex-shrink: 0; cursor: pointer; }
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track { position: absolute; inset: 0; background: var(--border); border-radius: 18px; transition: background 0.2s; }
+  .toggle-track::after {
+    content: ''; position: absolute; left: 2px; top: 2px;
+    width: 14px; height: 14px; background: #fff; border-radius: 50%;
+    transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .toggle input:checked + .toggle-track { background: var(--green); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(12px); }
+
+  .btn-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 1px 3px; border-radius: 3px; transition: color 0.1s; flex-shrink: 0; }
+  .btn-remove:hover { color: #c0392b; }
+  .empty-courses { font-size: 11px; color: var(--muted); text-align: center; padding: 12px; border: 1.5px dashed var(--border); border-radius: 6px; }
+
+  /* ── Main ── */
+  main { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; overflow-x: auto; }
+
+  #status-bar { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; flex-shrink: 0; }
+  .status-dot.running { background: #f4a261; animation: pulse 0.7s ease-in-out infinite; }
+  .status-dot.done    { background: var(--green); }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  .time-filter { background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+  .time-filter-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .time-filter-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .time-range-display { font-family: var(--mono); font-size: 13px; color: var(--green); font-weight: 500; }
+  .dual-slider { position: relative; height: 22px; padding: 0 2px; }
+  .slider-track { position: absolute; height: 4px; background: var(--border); border-radius: 2px; top: 9px; left: 2px; right: 2px; }
+  .slider-fill  { position: absolute; height: 4px; background: var(--green); border-radius: 2px; top: 9px; }
+  .dual-slider input[type="range"] {
+    position: absolute; width: calc(100% - 4px); left: 2px; height: 4px; background: none;
+    pointer-events: none; -webkit-appearance: none; outline: none; top: 9px; margin: 0;
+  }
+  .dual-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: all; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--green); cursor: pointer; border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3); margin-top: -8px;
+  }
+  .dual-slider input[type="range"]::-webkit-slider-thumb:hover { background: #235c42; }
+
+  .table-wrap { overflow-x: auto; border: 2px solid var(--border); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; min-width: 100%; font-size: 12px; }
+  thead th {
+    background: var(--green); color: #fff; font-family: var(--mono); font-size: 9px;
+    letter-spacing: 1px; padding: 8px 4px; white-space: nowrap; text-align: center;
+    border-right: 1px solid #235c42; position: sticky; top: 0; min-width: 62px;
+  }
+  thead th:first-child { text-align: left; padding-left: 14px; min-width: 140px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #235c42; }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover td { background: #f9f6f0; }
+  tbody td { padding: 7px 6px; text-align: center; border-right: 1px solid var(--border); vertical-align: middle; }
+  tbody td:first-child { text-align: left; padding-left: 14px; font-weight: 600; font-size: 13px; white-space: nowrap; position: sticky; left: 0; background: var(--surface); border-right: 2px solid var(--border); z-index: 1; }
+  tbody tr:hover td:first-child { background: #f9f6f0; }
+
+  .cell-spots {
+    font-family: var(--mono); font-weight: 500; font-size: 11px; min-width: 44px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;
+    padding: 0 5px; white-space: nowrap;
+  }
+  .spots-4, .spots-3 { background: var(--green-lt); color: var(--green); }
+  .spots-2, .spots-1 { background: var(--yellow-lt); color: #b45309; }
+  .spots-0 { background: var(--red-lt); color: #9b1c1c; }
+  .cell-error { color: #e74c3c; font-family: var(--mono); font-size: 10px; }
+
+  .empty-state { text-align: center; padding: 80px 40px; color: var(--muted); }
+  .empty-state .icon { font-size: 52px; margin-bottom: 16px; }
+  .empty-state h2 { font-family: var(--display); font-size: 28px; color: var(--text); letter-spacing: 1px; margin-bottom: 8px; }
+  .empty-state p { font-size: 13px; line-height: 1.6; max-width: 340px; margin: 0 auto; }
+
+  .legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .btn-remove {
-    width: 22px;
-    height: 22px;
-    background: none;
-    border: 1px solid var(--border2);
-    color: var(--muted2);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    transition: all 0.15s;
-    flex-shrink: 0;
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 100; align-items: center; justify-content: center;
   }
-  .btn-remove:hover { border-color: var(--error); color: var(--error); }
-
-  .queue-empty {
-    padding: 48px 0;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--muted2);
-    letter-spacing: 0.04em;
-    border: 1px solid var(--border);
+  .modal-overlay.visible { display: flex; }
+  .modal {
+    background: var(--surface); border: 2px solid var(--border); border-radius: 10px;
+    padding: 24px; width: 320px; max-width: 90vw; display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   }
-
-  /* ── Options layout — three equal columns ───────────────────────────────── */
-  .options-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-    align-items: start;
-    margin-bottom: 24px;
+  .modal h3 { font-family: var(--display); font-size: 20px; letter-spacing: 1px; color: var(--text); }
+  .modal label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+  .modal input { width: 100%; }
+  .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .btn-modal-save {
+    background: var(--green); color: #fff; font-family: var(--sans); font-weight: 600;
+    font-size: 13px; border: none; border-radius: 4px; padding: 8px 18px; cursor: pointer;
   }
-
-  .main-col { display: contents; }
-  .side-panel { display: contents; }
-  .side-cols { display: contents; }
-
-  .side-box {
-    border: 1px solid var(--border2);
-    border-radius: var(--radius);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+  .btn-modal-save:hover { background: #235c42; }
+  .btn-modal-cancel {
+    background: var(--bg); color: var(--muted); font-family: var(--sans); font-weight: 600;
+    font-size: 13px; border: 1.5px solid var(--border); border-radius: 4px; padding: 8px 18px; cursor: pointer;
   }
-
-  .side-box-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    background: var(--surface2);
-    border-bottom: 1px solid var(--border2);
-    flex-shrink: 0;
-    gap: 10px;
-  }
-
-  .side-box-title {
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--muted2);
-  }
-
-  .side-box-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .side-box-body {
-    background: var(--surface);
-    flex: 1;
-    max-height: 480px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border3) transparent;
-  }
-  .side-box-body::-webkit-scrollbar { width: 4px; }
-  .side-box-body::-webkit-scrollbar-track { background: transparent; }
-  .side-box-body::-webkit-scrollbar-thumb { background: var(--border3); border-radius: 2px; }
-
-  .side-box-footer {
-    padding: 16px;
-    border-top: 1px solid var(--border2);
-    background: var(--surface2);
-    flex-shrink: 0;
-  }
-
-  .offer-placeholder {
-    padding: 28px 18px;
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--muted);
-    letter-spacing: 0.04em;
-    font-style: italic;
-    border: 1px dashed var(--border2);
-    margin: 12px;
-    text-align: center;
-  }
-
-  /* ── Format labels ────────────────────────────────────────────────────────── */
-  .fmt-label {
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 6px;
-    text-align: center;
-  }
-
-  .format-toggle-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .format-toggle {
-    width: 140px;
-  }
-
-  /* ── Upload tab ───────────────────────────────────────────────────────────── */
-  .upload-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    align-items: start;
-  }
-
-  .upload-drop {
-    border: 1px dashed var(--border3);
-    padding: 36px 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    margin-bottom: 16px;
-  }
-  .upload-drop:hover { border-color: var(--platinum); background: rgba(194,186,168,0.03); }
-  .upload-drop.has-file { border-color: var(--success); border-style: solid; }
-
-  .upload-icon {
-    font-size: 28px;
-    color: var(--muted);
-    margin-bottom: 10px;
-    font-weight: 200;
-  }
-
-  .upload-label {
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--muted2);
-    margin-bottom: 4px;
-    letter-spacing: 0.02em;
-  }
-
-  .upload-sub {
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 0.04em;
-  }
-
-  .upload-file-info {
-    padding: 12px 14px;
-    border: 1px solid var(--border2);
-    background: var(--surface2);
-  }
-
-  .upload-filename {
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--platinum2);
-    margin-bottom: 3px;
-    word-break: break-all;
-  }
-
-  .upload-filesize {
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 0.04em;
-  }
-
-  .slider-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-  }
-
-  .slider-label {
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--muted2);
-    letter-spacing: 0.04em;
-  }
-
-  .slider-value {
-    font-size: 16px;
-    font-weight: 400;
-    color: var(--platinum2);
-    font-family: 'DM Mono', monospace;
-    letter-spacing: 0.05em;
-  }
-
-  .endcard-slider {
-    width: 100%;
-    margin-bottom: 14px;
-    accent-color: var(--platinum);
-    cursor: pointer;
-  }
-
-  .slider-sublabel {
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.6;
-    letter-spacing: 0.03em;
-    margin-bottom: 16px;
-  }
-
-  .upload-status {
-    padding: 10px 14px;
-    font-size: 12px;
-    font-weight: 400;
-    letter-spacing: 0.04em;
-    border: 1px solid var(--border2);
-  }
-  .upload-status.success { border-color: rgba(143,186,122,0.3); color: var(--success); }
-  .upload-status.error   { border-color: rgba(186,122,122,0.3); color: var(--error); }
-  .upload-status.loading { color: var(--muted2); }
-
-  .empty { font-size: 13px; font-weight: 400; color: var(--muted); text-align: center; padding: 24px 0; letter-spacing: 0.04em; }
-  .hint  { font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0.04em; font-style: italic; }
+  .btn-modal-cancel:hover { border-color: var(--muted); }
 </style>
 </head>
 <body>
-<div class="shell">
 
-  <!-- Masthead -->
-  <div class="masthead">
-    <div class="masthead-left">
-      <div class="studio-mark">
-        <div class="mark-icon">
-          <span></span><span></span><span></span>
-        </div>
-        <span class="studio-label">Render Studio</span>
-      </div>
-      <h1>Dealer Video Automation</h1>
+<header>
+  <div class="header-left">
+    <div>
+      <h1>⛳ Tee Time Finder</h1>
     </div>
-    <div class="agent-status" id="agent-status">
-      <div class="status-indicator"></div>
-      <span id="agent-label">Connecting…</span>
+    <div class="state-selector-wrap">
+      <span class="date-label">State</span>
+      <select class="state-select" id="state-select" onchange="onStateChange(this.value)">
+      </select>
     </div>
   </div>
-
-  <!-- Tabs -->
-  <div class="tab-bar">
-    <button class="tab-btn active" id="tab-btn-options" onclick="switchTab('options')">
-      Video Options
-    </button>
-    <button class="tab-btn" id="tab-btn-queue" onclick="switchTab('queue')">
-      Render Queue
-      <span class="tab-count" id="queue-count">0</span>
-    </button>
-    <button class="tab-btn" id="tab-btn-upload" onclick="switchTab('upload')">
-      Upload Video
+  <div class="header-right">
+    <div class="date-wrap">
+      <span class="date-label">Date</span>
+      <input type="date" id="date-picker" />
+    </div>
+    <button class="btn-refresh" id="refresh-btn" onclick="startRefresh()">
+      <span id="refresh-icon">↻</span> FIND TEE TIMES
     </button>
   </div>
+</header>
 
-  <!-- ── VIDEO OPTIONS ────────────────────────────────────────────────────── -->
-  <div class="tab-panel active" id="panel-options">
-
-    <div class="options-layout" id="options-layout">
-
-      <!-- Box 1: Videos -->
-      <div class="side-box">
-        <div class="side-box-header">
-          <span class="side-box-title">Videos</span>
-          <div class="side-box-actions">
-            <button class="link-btn" onclick="toggleSelectAllVideos()">Select all</button>
-          </div>
-        </div>
-        <div class="side-box-body">
-          <div id="video-list"><div class="empty">Loading…</div></div>
-        </div>
-        <div class="side-box-footer">
-          <div class="format-label" style="margin-bottom:12px">Output Format</div>
-          <div class="format-options">
-            <div class="format-toggle-wrap">
-              <div class="fmt-label">Rough Cut</div>
-              <div class="format-toggle on" id="fmt-mp4" onclick="toggleFormat('mp4')">
-                <div class="fmt-pip"></div>
-                <div class="fmt-info">
-                  <span class="fmt-name">MP4</span>
-                  <span class="fmt-desc">H.264</span>
-                </div>
-              </div>
-            </div>
-            <div class="format-toggle-wrap">
-              <div class="fmt-label">Final File</div>
-              <div class="format-toggle" id="fmt-mov" onclick="toggleFormat('mov')">
-                <div class="fmt-pip"></div>
-                <div class="fmt-info">
-                  <span class="fmt-name">MOV</span>
-                  <span class="fmt-desc">ProRes</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+<div class="layout">
+  <aside>
+    <div>
+      <p class="section-title">Add Course</p>
+      <div class="add-form">
+        <input type="text" id="inp-name" placeholder="Course name" />
+        <input type="url"  id="inp-url"  placeholder="https://booking URL..." />
+        <button class="btn-add" onclick="addCourse()">+ Add Course</button>
       </div>
+    </div>
+    <div>
+      <p class="section-title">Your Courses</p>
+      <div class="course-list" id="course-list"></div>
+    </div>
+  </aside>
 
-      <!-- Box 2: Dealer Names -->
-      <div class="side-box">
-        <div class="side-box-header">
-          <span class="side-box-title">Dealer Names</span>
-          <div class="side-box-actions">
-            <button class="link-btn" onclick="toggleSelectAll()">Select all</button>
-            <span class="sel-count-label" id="sel-count-label"></span>
-          </div>
-        </div>
-        <div class="side-box-body" id="company-panel">
-          <div class="empty" style="padding:24px 18px">
-            <div class="hint">Select a video first</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Box 3: Offer Info -->
-      <div class="side-box">
-        <div class="side-box-header">
-          <span class="side-box-title">Offer Info</span>
-        </div>
-        <div class="side-box-body">
-          <div class="offer-placeholder">Offer Info Goes Here</div>
-        </div>
-      </div>
-
+  <main>
+    <div id="status-bar">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Add courses and hit Refresh</span>
     </div>
 
-    <!-- Render bar -->
-    <div class="render-bar">
-      <button class="btn-start-render" id="btn-start-render" disabled onclick="startRender()">
-        <span>Start Render</span>
-      </button>
-      <span class="render-hint" id="render-hint">Select videos and companies to begin</span>
-    </div>
-
-  </div>
-
-  <!-- ── RENDER QUEUE ──────────────────────────────────────────────────────── -->
-  <div class="tab-panel" id="panel-queue">
-
-    <div class="queue-controls">
-      <div class="queue-stats" id="queue-stats">
-        <div class="stat-item"><div class="stat-bar staged"></div><span id="stat-staged">0</span>&nbsp;staged</div>
-        <div class="stat-item"><div class="stat-bar pending"></div><span id="stat-pending">0</span>&nbsp;queued</div>
-        <div class="stat-item"><div class="stat-bar running"></div><span id="stat-rendering">0</span>&nbsp;rendering</div>
-        <div class="stat-item"><div class="stat-bar done"></div><span id="stat-done">0</span>&nbsp;done</div>
+    <div class="time-filter">
+      <div class="time-filter-top">
+        <span class="time-filter-label">Time Range</span>
+        <span class="time-range-display" id="range-display">6:00 AM — 6:00 PM</span>
       </div>
-      <div class="queue-btns">
-        <button class="btn-queue-action" onclick="clearCompleted()">Clear done</button>
-        <button class="btn-queue-action" id="btn-pause" onclick="togglePause()">Pause</button>
+      <div class="dual-slider">
+        <div class="slider-track"></div>
+        <div class="slider-fill" id="slider-fill"></div>
+        <input type="range" id="slider-min" min="0" max="72" value="0"  oninput="onSliderChange()" />
+        <input type="range" id="slider-max" min="0" max="72" value="72" oninput="onSliderChange()" />
       </div>
     </div>
 
-    <div class="pause-notice" id="pause-notice">
-      Queue paused — pending jobs will not start until resumed.
+    <div class="legend" id="legend" style="display:none">
+      <div class="legend-item"><div class="legend-dot" style="background:#d8f3dc"></div> 3–4 spots</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fef3e2"></div> 1–2 spots</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fde8e8"></div> Full / 0</div>
     </div>
 
-    <div id="queue-body"></div>
-
-  </div>
-
+    <div id="results-area">
+      <div class="empty-state">
+        <div class="icon">🏌️</div>
+        <h2>Ready to Find Tee Times</h2>
+        <p>Add courses in the sidebar, toggle the ones you want, set your time range, pick a date, and hit <strong>Refresh</strong>.</p>
+      </div>
+    </div>
+  </main>
 </div>
+
+<!-- Edit course modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>Edit Course</h3>
+    <div>
+      <label>Course Name</label>
+      <input type="text" id="edit-name" />
+    </div>
+    <div>
+      <label>Booking URL</label>
+      <input type="url" id="edit-url" />
+    </div>
+    <div class="modal-btns">
+      <button class="btn-modal-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-modal-save" onclick="saveEditModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ── State ─────────────────────────────────────────────────────────────────────
-let companies    = [];
-let comps        = [];
-let activeVideo  = null;
-let videoConfigs = {};
-let serverJobs   = [];
-let queuePaused  = false;
-let activeTab    = 'options';
-let queueTimer   = null;
-let selectedFormats = new Set(['mp4']); // default MP4 selected
-
-// ── Side panel (no-op — always visible now) ───────────────────────────────────
-function openAccordion() {}
-function closePanel() {}
-
-function updateDealerSummary() {
-  const el = document.getElementById('sel-count-label');
-  if (!el) return;
-  if (!activeVideo) { el.textContent = ''; return; }
-  const cfg = videoConfigs[activeVideo];
-  const count = cfg ? cfg.companies.size : 0;
-  el.textContent = count > 0 ? `${count} selected` : '';
-}
-
-// ── Format selection ──────────────────────────────────────────────────────────
-function toggleFormat(fmt) {
-  if (selectedFormats.has(fmt)) {
-    // Don't allow deselecting if it's the only one
-    if (selectedFormats.size === 1) return;
-    selectedFormats.delete(fmt);
-  } else {
-    selectedFormats.add(fmt);
-  }
-  document.getElementById(`fmt-${fmt}`).classList.toggle('on', selectedFormats.has(fmt));
-  updateRenderBtn();
-  afterSelectionChange();
-}
-
-// ── Upload tab ────────────────────────────────────────────────────────────────
-let selectedFile = null;
-let agentIP = null;
-let agentPort = 3001;
-
-async function fetchAgentInfo() {
-  try {
-    const r = await fetch('/api/agent/info');
-    const d = await r.json();
-    if (d.agentInfo) { agentIP = d.agentInfo.ip; agentPort = d.agentInfo.port || 3001; }
-  } catch {}
-}
-
-function handleFileSelect(input) {
-  const file = input.files[0];
-  if (!file) return;
-  selectedFile = file;
-
-  document.getElementById('upload-drop').classList.add('has-file');
-  document.getElementById('upload-file-info').style.display = 'block';
-  document.getElementById('upload-filename').textContent = file.name;
-  document.getElementById('upload-filesize').textContent = (file.size / 1024 / 1024).toFixed(1) + ' MB';
-  document.getElementById('btn-upload').disabled = false;
-  document.getElementById('upload-status').style.display = 'none';
-}
-
-function updateSlider(val) {
-  const s = parseInt(val);
-  const mm = Math.floor(s / 60).toString().padStart(1,'0');
-  const ss = (s % 60).toString().padStart(2,'0');
-  document.getElementById('slider-value').textContent = `${mm}:${ss}`;
-}
-
-async function uploadVideo() {
-  if (!selectedFile) return;
-  if (!agentIP) {
-    await fetchAgentInfo();
-    if (!agentIP) {
-      showUploadStatus('error', 'Render agent not connected — start the agent on your Mac first.');
-      return;
+const START_H = 6, END_H = 18;
+function getSlots() {
+  const s = [];
+  for (let h = START_H; h <= END_H; h++) {
+    for (let m = 0; m < 60; m += 10) {
+      if (h === END_H && m > 0) break;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12  = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+      s.push(`${h12}:${m === 0 ? '00' : m} ${ampm}`);
     }
   }
+  return s;
+}
+const ALL_SLOTS = getSlots();
 
-  const endcardSecond = document.getElementById('endcard-slider').value;
-  const btn = document.getElementById('btn-upload');
-  btn.disabled = true;
-  showUploadStatus('loading', 'Uploading… this may take a moment for large files.');
+// ── State management ──────────────────────────────────────────
 
-  const formData = new FormData();
-  formData.append('video', selectedFile, selectedFile.name);
-  formData.append('endcardSecond', endcardSecond);
+let allStates = ['Michigan'];
 
+function getCurrentState() {
+  return localStorage.getItem('tee_current_state') || allStates[0] || 'Michigan';
+}
+function setCurrentState(s) { localStorage.setItem('tee_current_state', s); }
+
+async function loadStates() {
   try {
-    const r = await fetch(`http://${agentIP}:${agentPort}/upload`, {
-      method: 'POST',
-      body: formData,
-    });
-    const d = await r.json();
-    if (d.success) {
-      showUploadStatus('success', `✓ "${d.compName}" created in After Effects. Refresh the Video Options tab to see it.`);
-      // Reset form
-      selectedFile = null;
-      document.getElementById('file-input').value = '';
-      document.getElementById('upload-drop').classList.remove('has-file');
-      document.getElementById('upload-file-info').style.display = 'none';
-      document.getElementById('endcard-slider').value = 0;
-      updateSlider(0);
-      // Refresh comps list
-      loadComps();
-    } else {
-      showUploadStatus('error', `Error: ${d.error || 'Upload failed'}`);
-      btn.disabled = false;
-    }
-  } catch (err) {
-    showUploadStatus('error', `Could not reach agent at ${agentIP}:${agentPort}. Make sure you are on the same network or VPN.`);
-    btn.disabled = false;
-  }
+    allStates = await fetch('/api/states').then(r => r.json());
+  } catch { allStates = ['Michigan']; }
+  renderStateSelect();
 }
 
-function showUploadStatus(type, msg) {
-  const el = document.getElementById('upload-status');
-  el.style.display = 'block';
-  el.className = `upload-status ${type}`;
-  el.textContent = msg;
+function renderStateSelect() {
+  const sel = document.getElementById('state-select');
+  const cur = getCurrentState();
+  sel.innerHTML = allStates.map(s =>
+    `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s)}</option>`
+  ).join('') + `<option value="__add__" class="add-state-opt">＋ Add State…</option>`;
 }
 
-// ── Tab switching (updated to handle upload tab) ──────────────────────────────
-function switchTab(tab) {
-  activeTab = tab;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById(`tab-btn-${tab}`).classList.add('active');
-  document.getElementById(`panel-${tab}`).classList.add('active');
-  if (tab === 'queue') {
-    fetchAndRenderQueue();
-    if (!queueTimer) queueTimer = setInterval(fetchAndRenderQueue, 2500);
-  } else {
-    clearInterval(queueTimer);
-    queueTimer = null;
-  }
-  if (tab === 'upload') fetchAgentInfo();
-}
-
-// ── Agent status ──────────────────────────────────────────────────────────────
-async function checkAgent() {
-  try {
-    const d = await fetch('/api/agent/status').then(r => r.json());
-    const el = document.getElementById('agent-status');
-    const lb = document.getElementById('agent-label');
-    el.classList.toggle('online', d.connected);
-    lb.textContent = d.connected ? 'Agent connected' : 'Agent offline';
-  } catch {}
-}
-checkAgent();
-setInterval(checkAgent, 5000);
-
-// ── Data loading ──────────────────────────────────────────────────────────────
-async function loadAll() {
-  await Promise.all([
-    fetch('/api/comps').then(r => r.json()).then(d => { comps = d.comps || []; renderVideoList(); }),
-    fetch('/api/companies').then(r => r.json()).then(d => { companies = d.companies || []; }),
-  ]);
-}
-loadAll();
-
-// ── Config helpers ────────────────────────────────────────────────────────────
-function getConfig(name) {
-  if (!videoConfigs[name]) {
-    videoConfigs[name] = {
-      selected: false,
-      companies: new Set(),
-      initialized: false,
-    };
-  }
-  return videoConfigs[name];
-}
-
-function initConfig(name) {
-  const cfg = getConfig(name);
-  if (!cfg.initialized) {
-    companies.forEach(c => cfg.companies.add(c.id));
-    cfg.initialized = true;
-  }
-}
-
-function getStagedJobs() {
-  const staged = [];
-  comps.forEach(compName => {
-    const cfg = videoConfigs[compName];
-    if (!cfg || !cfg.selected) return;
-    cfg.companies.forEach(companyId => {
-      const co = companies.find(c => c.id === companyId);
-      if (!co) return;
-      selectedFormats.forEach(format => {
-        staged.push({
-          id: `staged::${compName}::${companyId}::${format}`,
-          staged: true,
-          compName, company: co.name, companyId,
-          swapLogo: true, swapVO: true,
-          format,
-          status: 'staged',
-        });
-      });
-    });
-  });
-  return staged;
-}
-
-function updateRenderBtn() {
-  const staged = getStagedJobs();
-  const btn  = document.getElementById('btn-start-render');
-  const hint = document.getElementById('render-hint');
-  btn.disabled = staged.length === 0;
-  if (staged.length > 0) {
-    hint.textContent = `${staged.length} render${staged.length > 1 ? 's' : ''} ready to queue`;
-  } else {
-    hint.textContent = 'Select videos and companies to begin';
-  }
-  updateQueueCount();
-}
-
-function updateQueueCount() {
-  const staged  = getStagedJobs().length;
-  const pending = serverJobs.filter(j => j.status === 'pending').length;
-  const total   = staged + pending;
-  const el = document.getElementById('queue-count');
-  if (total > 0) { el.textContent = total; el.classList.add('show'); }
-  else el.classList.remove('show');
-}
-
-// ── Video list ────────────────────────────────────────────────────────────────
-function renderVideoList() {
-  const list = document.getElementById('video-list');
-  if (!comps.length) {
-    list.innerHTML = '<div class="empty">No videos — start the agent first</div>';
-    return;
-  }
-  list.innerHTML = '';
-  comps.forEach(name => {
-    const cfg = videoConfigs[name];
-    const isSelected = cfg && cfg.selected;
-    const isActive   = name === activeVideo;
-    const row = document.createElement('div');
-    row.className = ['video-row', isSelected ? 'selected' : '', isActive ? 'active' : ''].filter(Boolean).join(' ');
-    row.innerHTML = `
-      <div class="v-checkbox" onclick="toggleVideoSelected('${esc(name)}', event)">
-        <div class="v-check"></div>
-      </div>
-      <span class="video-name" onclick="focusVideo('${esc(name)}')">${esc(name)}</span>
-      <div class="active-pip"></div>
-    `;
-    list.appendChild(row);
-  });
-}
-
-function toggleSelectAllVideos() {
-  const allSelected = comps.every(n => videoConfigs[n] && videoConfigs[n].selected);
-  if (allSelected) {
-    // Deselect all
-    comps.forEach(n => { if (videoConfigs[n]) videoConfigs[n].selected = false; });
-    activeVideo = null;
-  } else {
-    // Select all
-    comps.forEach(n => {
-      const cfg = getConfig(n);
-      cfg.selected = true;
-      initConfig(n);
-    });
-    if (!activeVideo && comps.length) activeVideo = comps[0];
-  }
-  renderVideoList();
-  renderCompanyPanel();
-  updateRenderBtn();
-}
-
-function toggleVideoSelected(name, event) {
-  event.stopPropagation();
-  const cfg = getConfig(name);
-  cfg.selected = !cfg.selected;
-  if (cfg.selected) {
-    initConfig(name);
-    activeVideo = name;
-    openAccordion();
-  } else if (activeVideo === name) {
-    activeVideo = null;
-    if (!comps.some(n => videoConfigs[n] && videoConfigs[n].selected)) closePanel();
-  }
-  renderVideoList();
-  renderCompanyPanel();
-  updateRenderBtn();
-}
-
-function focusVideo(name) {
-  const cfg = getConfig(name);
-  if (!cfg.selected) {
-    cfg.selected = true;
-    initConfig(name);
-  }
-  activeVideo = name;
-  renderVideoList();
-  renderCompanyPanel();
-  openAccordion();
-  updateRenderBtn();
-}
-
-// ── Company panel ─────────────────────────────────────────────────────────────
-function renderCompanyPanel() {
-  const panel = document.getElementById('company-panel');
-  if (!activeVideo) {
-    panel.innerHTML = `<div class="empty" style="padding:24px 18px"><div class="hint">Select a video first</div></div>`;
-    updateDealerSummary();
-    return;
-  }
-
-  const cfg = getConfig(activeVideo);
-
-  if (!companies.length) {
-    panel.innerHTML = '<div class="empty" style="padding:24px 18px">No companies found</div>';
-    return;
-  }
-
-  panel.innerHTML = '';
-  companies.forEach(c => {
-    const isChecked = cfg.companies.has(c.id);
-    const row = document.createElement('div');
-    row.className = ['company-row', isChecked ? 'checked' : ''].filter(Boolean).join(' ');
-    row.innerHTML = `
-      <div class="company-main" onclick="toggleCompany('${c.id}')">
-        <div class="c-checkbox"><div class="c-check"></div></div>
-        <span class="company-name">${esc(c.name)}</span>
-      </div>
-    `;
-    panel.appendChild(row);
-  });
-
-  const selCount = cfg.companies.size;
-  document.getElementById('sel-count-label').textContent = `${selCount} of ${companies.length}`;
-  updateDealerSummary();
-  updateRenderBtn();
-}
-
-function toggleCompany(id) {
-  if (!activeVideo) return;
-  const cfg = getConfig(activeVideo);
-  if (cfg.companies.has(id)) cfg.companies.delete(id);
-  else { cfg.companies.add(id); }
-  renderCompanyPanel();
-  updateRenderBtn();
-}
-
-function toggleSwap(id, type) {
-  if (!activeVideo) return;
-  const cfg = getConfig(activeVideo);
-  if (!cfg.swapState[id]) cfg.swapState[id] = { logo: true, vo: true };
-  cfg.swapState[id][type] = !cfg.swapState[id][type];
-  renderCompanyPanel();
-}
-
-function toggleSelectAll() {
-  if (!activeVideo) return;
-  const cfg = getConfig(activeVideo);
-  if (cfg.companies.size === companies.length) {
-    cfg.companies.clear();
-  } else {
-    companies.forEach(c => cfg.companies.add(c.id));
-  }
-  renderCompanyPanel();
-  updateRenderBtn();
-}
-
-// ── Start Render ──────────────────────────────────────────────────────────────
-async function startRender() {
-  const staged = getStagedJobs();
-  if (!staged.length) return;
-
-  document.getElementById('btn-start-render').disabled = true;
-
-  for (const job of staged) {
-    try {
-      await fetch('/api/jobs', {
+async function onStateChange(val) {
+  if (val === '__add__') {
+    const name = prompt('Enter state name:');
+    if (name && name.trim()) {
+      const trimmed = name.trim();
+      const res = await fetch('/api/states', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyId: job.companyId,
-          compName:  job.compName,
-          swapLogo:  job.swapLogo,
-          swapVO:    job.swapVO,
-          format:    job.format,
-        }),
+        body: JSON.stringify({ name: trimmed })
       });
-    } catch {}
-  }
-
-  // Clear selections
-  closePanel();
-  videoConfigs = {};
-  activeVideo  = null;
-  renderVideoList();
-  renderCompanyPanel();
-  updateRenderBtn();
-
-  // Switch to queue
-  switchTab('queue');
-}
-
-// ── Remove staged job from UI (uncheck company or video) ──────────────────────
-function removeStagedJob(compName, companyId) {
-  const cfg = videoConfigs[compName];
-  if (!cfg) return;
-  cfg.companies.delete(companyId);
-  if (cfg.companies.size === 0) {
-    cfg.selected = false;
-    if (activeVideo === compName) activeVideo = null;
-  }
-  renderVideoList();
-  renderCompanyPanel();
-  updateRenderBtn();
-  renderQueueView();
-}
-
-// ── Render Queue ──────────────────────────────────────────────────────────────
-async function fetchAndRenderQueue() {
-  try {
-    const [jobsRes, queueRes] = await Promise.all([
-      fetch('/api/jobs'),
-      fetch('/api/queue/status'),
-    ]);
-    serverJobs  = (await jobsRes.json()).jobs || [];
-    queuePaused = (await queueRes.json()).paused;
-    renderQueueView();
-    updateQueuePauseUI();
-    updateQueueCount();
-  } catch {}
-}
-
-function renderQueueView() {
-  const staged = getStagedJobs();
-  const body   = document.getElementById('queue-body');
-
-  // Stats
-  document.getElementById('stat-staged').textContent    = staged.length;
-  document.getElementById('stat-pending').textContent   = serverJobs.filter(j => j.status === 'pending').length;
-  document.getElementById('stat-rendering').textContent = serverJobs.filter(j => j.status === 'rendering').length;
-  document.getElementById('stat-done').textContent      = serverJobs.filter(j => j.status === 'done' || j.status === 'error').length;
-
-  if (!staged.length && !serverJobs.length) {
-    body.innerHTML = `<div class="queue-empty">No renders queued.<br>Go to Video Options to configure and start a render.</div>`;
+      allStates = await res.json();
+      setCurrentState(trimmed);
+    }
+    renderStateSelect();
+    renderCourseList();
+    lastResults = [];
+    document.getElementById('results-area').innerHTML = `<div class="empty-state"><div class="icon">🏌️</div><h2>Ready to Find Tee Times</h2><p>Hit Refresh to load tee times for ${esc(getCurrentState())}.</p></div>`;
+    document.getElementById('legend').style.display = 'none';
     return;
   }
+  setCurrentState(val);
+  renderCourseList();
+  lastResults = [];
+  document.getElementById('results-area').innerHTML = `<div class="empty-state"><div class="icon">🏌️</div><h2>Ready to Find Tee Times</h2><p>Hit Refresh to load tee times for ${esc(val)}.</p></div>`;
+  document.getElementById('legend').style.display = 'none';
+}
 
-  body.innerHTML = '';
+// ── Toggle state ──────────────────────────────────────────────
+function getDisabled() { try { return JSON.parse(localStorage.getItem('disabled_courses') || '[]'); } catch { return []; } }
+function saveDisabled(a) { localStorage.setItem('disabled_courses', JSON.stringify(a)); }
+function isCourseEnabled(id) { return !getDisabled().includes(id); }
+function toggleCourse(id) {
+  const d = getDisabled(), i = d.indexOf(id);
+  i === -1 ? d.push(id) : d.splice(i, 1);
+  saveDisabled(d);
+  renderCourseList();
+  if (lastResults.length > 0) rebuildTableFromResults();
+}
 
-  // Staged section
-  if (staged.length) {
-    const head = document.createElement('div');
-    head.className = 'queue-section-head';
-    head.innerHTML = `<span>Staged</span><span style="font-size:10px;font-weight:300;color:var(--muted)">Click Start Render to submit</span>`;
-    body.appendChild(head);
-    staged.forEach(job => body.appendChild(buildJobRow(job, true)));
+// ── Dual slider ───────────────────────────────────────────────
+function onSliderChange() {
+  let minV = parseInt(document.getElementById('slider-min').value);
+  let maxV = parseInt(document.getElementById('slider-max').value);
+  const total = ALL_SLOTS.length - 1;
+  if (minV >= maxV) {
+    if (document.activeElement.id === 'slider-min') { minV = maxV - 1; document.getElementById('slider-min').value = minV; }
+    else { maxV = minV + 1; document.getElementById('slider-max').value = maxV; }
   }
+  const lp = (minV / total) * 100, rp = (maxV / total) * 100;
+  const fill = document.getElementById('slider-fill');
+  fill.style.left  = `calc(${lp}% + 2px)`;
+  fill.style.width = `calc(${rp - lp}% - 4px)`;
+  document.getElementById('range-display').textContent = `${ALL_SLOTS[minV]} — ${ALL_SLOTS[maxV]}`;
+  applyTimeFilter();
+}
 
-  // Rendering
-  const rendering = serverJobs.filter(j => j.status === 'rendering');
-  if (rendering.length) {
-    const head = document.createElement('div');
-    head.className = 'queue-section-head';
-    head.innerHTML = `<span>Rendering</span>`;
-    body.appendChild(head);
-    rendering.forEach(job => body.appendChild(buildJobRow(job, false)));
+function applyTimeFilter() {
+  const minV = parseInt(document.getElementById('slider-min').value);
+  const maxV = parseInt(document.getElementById('slider-max').value);
+  const table = document.getElementById('tee-table');
+  if (!table) return;
+  table.querySelectorAll('tr').forEach(row => {
+    for (let i = 0; i < ALL_SLOTS.length; i++) {
+      const cell = row.cells[i + 1];
+      if (cell) cell.style.display = (i >= minV && i <= maxV) ? '' : 'none';
+    }
+  });
+}
+
+// ── Courses ───────────────────────────────────────────────────
+let courses = [];
+
+async function loadCourses() {
+  try { courses = await fetch('/api/courses').then(r => r.json()); }
+  catch { courses = []; }
+}
+
+function getCoursesForState(state) {
+  return courses
+    .filter(c => c.state === state)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function renderCourseList() {
+  const state    = getCurrentState();
+  const el       = document.getElementById('course-list');
+  const filtered = getCoursesForState(state);
+  if (!filtered.length) {
+    el.innerHTML = `<div class="empty-courses">No courses in ${esc(state)} yet.</div>`;
+    return;
   }
+  el.innerHTML = filtered.map(c => {
+    const on = isCourseEnabled(c.id);
+    return `<div class="course-item ${on ? '' : 'disabled'}">
+      <div class="ci-name" title="Click to edit" onclick="openEditModal(${c.id})" style="cursor:pointer">${esc(c.name)}</div>
+      <label class="toggle" title="${on ? 'Disable' : 'Enable'}">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleCourse(${c.id})" />
+        <span class="toggle-track"></span>
+      </label>
+      <button class="btn-remove" onclick="deleteCourse(${c.id})" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
 
-  // Pending
-  const pending = serverJobs.filter(j => j.status === 'pending');
-  if (pending.length) {
-    const head = document.createElement('div');
-    head.className = 'queue-section-head';
-    head.innerHTML = `<span>Queued</span>`;
-    body.appendChild(head);
-    pending.forEach(job => body.appendChild(buildJobRow(job, false)));
-  }
+async function addCourse() {
+  const name  = document.getElementById('inp-name').value.trim();
+  const url   = document.getElementById('inp-url').value.trim();
+  const state = getCurrentState();
+  if (!name || !url) { alert('Please enter both a name and URL.'); return; }
+  const c = await fetch('/api/courses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url, state })
+  }).then(r => r.json());
+  courses.push(c);
+  renderCourseList();
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-url').value  = '';
+}
 
-  // Done + error
-  const completed = serverJobs.filter(j => j.status === 'done' || j.status === 'error');
-  if (completed.length) {
-    const head = document.createElement('div');
-    head.className = 'queue-section-head';
-    head.innerHTML = `<span>Completed</span>`;
-    body.appendChild(head);
-    completed.forEach(job => body.appendChild(buildJobRow(job, false)));
+async function deleteCourse(id) {
+  const course = courses.find(c => c.id === id);
+  if (!confirm(`Are you sure you want to delete "${course ? course.name : 'this course'}"?`)) return;
+  await fetch(`/api/courses/${id}`, { method: 'DELETE' });
+  courses = courses.filter(c => c.id !== id);
+  saveDisabled(getDisabled().filter(d => d !== id));
+  renderCourseList();
+}
+
+// ── Edit modal ────────────────────────────────────────────────
+let editingId = null;
+
+function openEditModal(id) {
+  const course = courses.find(c => c.id === id);
+  if (!course) return;
+  editingId = id;
+  document.getElementById('edit-name').value = course.name;
+  document.getElementById('edit-url').value  = course.url;
+  document.getElementById('edit-modal').classList.add('visible');
+  document.getElementById('edit-name').focus();
+}
+
+function closeEditModal() {
+  editingId = null;
+  document.getElementById('edit-modal').classList.remove('visible');
+}
+
+async function saveEditModal() {
+  if (!editingId) return;
+  const name = document.getElementById('edit-name').value.trim();
+  const url  = document.getElementById('edit-url').value.trim();
+  if (!name || !url) { alert('Please enter both a name and URL.'); return; }
+
+  await fetch(`/api/courses/${editingId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url })
+  });
+
+  const c = courses.find(c => c.id === editingId);
+  if (c) { c.name = name; c.url = url; }
+  closeEditModal();
+  renderCourseList();
+}
+
+// ── Table ─────────────────────────────────────────────────────
+function getEnabledCourses() {
+  return getCoursesForState(getCurrentState()).filter(c => isCourseEnabled(c.id));
+}
+
+function buildBookingUrl(courseUrl, dateVal) {
+  if (!dateVal) return courseUrl;
+  if (courseUrl.includes('date=')) return courseUrl.replace(/date=[^&]*/i, 'date=' + dateVal);
+  const sep = courseUrl.includes('?') ? '&' : '?';
+  return courseUrl + sep + 'date=' + dateVal;
+}
+
+function buildTable(enabled) {
+  const dateVal = document.getElementById('date-picker').value;
+  document.getElementById('results-area').innerHTML = `
+    <div class="table-wrap">
+      <table id="tee-table">
+        <thead><tr>
+          <th>COURSE</th>${ALL_SLOTS.map(s=>`<th>${s}</th>`).join('')}
+        </tr></thead>
+        <tbody>${enabled.map((c,i)=>`
+          <tr id="row-${i}">
+            <td><a href="${esc(buildBookingUrl(c.url, dateVal))}" target="_blank" style="color:inherit;text-decoration:none">${esc(c.name)} ↗</a></td>
+            ${ALL_SLOTS.map(()=>'<td></td>').join('')}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  document.getElementById('legend').style.display = 'flex';
+  applyTimeFilter();
+}
+
+function fillRow(idx, teeTimes, error) {
+  const row = document.getElementById(`row-${idx}`);
+  if (!row) return;
+  if (error) { row.cells[1].innerHTML = `<span class="cell-error" title="${esc(error)}">${esc(error.substring(0,60))}</span>`; return; }
+  if (!teeTimes || !teeTimes.length) { row.cells[1].innerHTML = `<span style="color:var(--muted);font-size:11px;font-family:var(--mono)">— no times found</span>`; return; }
+  for (const t of teeTimes) {
+    const r  = roundToNearest10(t.time);
+    if (!r) continue;
+    const si = ALL_SLOTS.indexOf(r);
+    if (si === -1) continue;
+    const sp   = t.spots !== null ? Math.min(t.spots, 4) : 4;
+    const cell = row.cells[si + 1];
+    if (!cell) continue;
+    const priceStr = (t.price !== null && t.price !== undefined && !isNaN(t.price)) ? `-$${Math.round(t.price)}` : '';
+    cell.innerHTML = `<span class="cell-spots spots-${sp}">${sp}${priceStr}</span>`;
   }
 }
 
-function buildJobRow(job, isStaged) {
-  const row = document.createElement('div');
-  row.className = ['job-row', (job.status === 'done' || job.status === 'error') ? 'faded' : ''].filter(Boolean).join(' ');
-
-  const tags = [
-    job.swapLogo ? '<span class="job-tag">Logo</span>' : '',
-    job.swapVO   ? '<span class="job-tag">VO</span>'   : '',
-    job.format   ? `<span class="job-tag">${job.format.toUpperCase()}</span>` : '',
-  ].join('');
-
-  let statusHtml = '';
-  if (job.status === 'staged')    statusHtml = `<div class="job-status staged">Ready</div>`;
-  if (job.status === 'pending')   statusHtml = `<div class="job-status pending">Queued</div>`;
-  if (job.status === 'rendering') statusHtml = `<div class="job-status rendering"><div class="render-spinner"></div>Rendering</div>`;
-  if (job.status === 'done')      statusHtml = `<div class="job-status done">Complete</div>`;
-  if (job.status === 'error')     statusHtml = `<div class="job-status error">Failed</div>`;
-
-  let removeBtn = '';
-  if (isStaged) {
-    removeBtn = `<button class="btn-remove" onclick="removeStagedJob('${esc(job.compName)}','${job.companyId}')" title="Remove">✕</button>`;
-  } else if (job.status === 'pending') {
-    removeBtn = `<button class="btn-remove" onclick="deleteServerJob('${job.id}')" title="Remove">✕</button>`;
-  }
-
-  row.innerHTML = `
-    <div class="job-left">
-      <div class="job-title">
-        <span class="job-video-name">${esc(job.compName)}</span>
-        <span class="job-arrow">→</span>
-        ${esc(job.company)}
-      </div>
-      <div class="job-tags">${tags}</div>
-    </div>
-    ${statusHtml}
-    ${removeBtn}
-  `;
-  return row;
+function roundToNearest10(s) {
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return null;
+  let h = parseInt(m[1]), min = parseInt(m[2]), ap = m[3].toUpperCase();
+  let r = Math.round(min / 10) * 10;
+  if (r === 60) { r = 0; h++; if (h===13) h=1; if (h===12 && ap==='AM') ap='PM'; }
+  return `${h}:${r===0?'00':r} ${ap}`;
 }
 
-async function deleteServerJob(jobId) {
+// ── Refresh ───────────────────────────────────────────────────
+let refreshing = false;
+let lastResults = [];
+
+function rebuildTableFromResults() {
+  const enabled = getEnabledCourses();
+  if (!enabled.length) {
+    document.getElementById('results-area').innerHTML = '<div class="empty-state"><div class="icon">🏌️</div><h2>No courses enabled</h2><p>Toggle a course on in the sidebar.</p></div>';
+    return;
+  }
+  buildTable(enabled);
+  lastResults.forEach(r => {
+    const i = enabled.findIndex(c => c.name === r.course);
+    if (i !== -1) fillRow(i, r.teeTimes, r.error);
+  });
+  applyTimeFilter();
+}
+
+async function startRefresh() {
+  const enabled = getEnabledCourses();
+  if (refreshing) return;
+  if (!enabled.length) { alert('No courses are enabled. Toggle at least one on.'); return; }
+
+  refreshing = true;
+  const dateVal = document.getElementById('date-picker').value;
+  const btn = document.getElementById('refresh-btn');
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+
+  btn.disabled = true;
+  document.getElementById('refresh-icon').innerHTML = '<span class="spin">↻</span>';
+  dot.className = 'status-dot running';
+  txt.textContent = `Checking ${enabled.length} course${enabled.length !== 1 ? 's' : ''}…`;
+  buildTable(enabled);
+
   try {
-    await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
-    fetchAndRenderQueue();
-  } catch {}
-}
+    const res    = await fetch('/api/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: dateVal, courses: enabled })
+    });
+    const reader = res.body.getReader();
+    const dec    = new TextDecoder();
+    let   buf    = '';
+    let   doneCount = 0;
 
-async function clearCompleted() {
-  try {
-    await fetch('/api/jobs', { method: 'DELETE' });
-    fetchAndRenderQueue();
-  } catch {}
-}
-
-async function togglePause() {
-  const endpoint = queuePaused ? '/api/queue/resume' : '/api/queue/pause';
-  try {
-    await fetch(endpoint, { method: 'POST' });
-    queuePaused = !queuePaused;
-    updateQueuePauseUI();
-  } catch {}
-}
-
-function updateQueuePauseUI() {
-  const btn    = document.getElementById('btn-pause');
-  const notice = document.getElementById('pause-notice');
-  if (queuePaused) {
-    btn.textContent = 'Resume';
-    btn.classList.add('pause-active');
-    notice.classList.add('show');
-  } else {
-    btn.textContent = 'Pause';
-    btn.classList.remove('pause-active');
-    notice.classList.remove('show');
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const ls = buf.split('\n'); buf = ls.pop();
+      for (const line of ls) {
+        if (!line.startsWith('data: ')) continue;
+        const msg = JSON.parse(line.slice(6));
+        if (msg.type === 'progress') {
+          if (msg.status === 'scraping') {
+            txt.textContent = `Scraping ${msg.course}…`;
+          } else if (msg.status === 'done' || msg.status === 'error') {
+            doneCount++;
+            txt.textContent = `Done ${doneCount} of ${enabled.length} — ${msg.status === 'error' ? msg.course + ' failed' : msg.course + ' ✓'}`;
+          }
+        } else if (msg.type === 'complete') {
+          const data = await fetch('/api/results').then(r => r.json());
+          lastResults = data.results || [];
+          lastResults.forEach(r => {
+            const i = enabled.findIndex(c => c.name === r.course);
+            if (i !== -1) fillRow(i, r.teeTimes, r.error);
+          });
+          applyTimeFilter();
+          const now = new Date();
+          txt.textContent = `Last refreshed ${now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${dateVal ? ' · ' + dateVal : ''}`;
+          dot.className = 'status-dot done';
+        }
+      }
+    }
+  } catch(e) {
+    txt.textContent = 'Refresh failed: ' + e.message;
+    dot.className = 'status-dot';
   }
+
+  refreshing = false;
+  btn.disabled = false;
+  document.getElementById('refresh-icon').textContent = '↻';
 }
 
-// Also refresh queue view when on queue tab after selection changes
-const _origToggleVideoSelected = toggleVideoSelected;
-const _origToggleCompany = toggleCompany;
-const _origToggleSwap = toggleSwap;
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+['inp-name','inp-url'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') addCourse(); }));
+['edit-name','edit-url'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') saveEditModal(); if(e.key==='Escape') closeEditModal(); }));
+document.getElementById('edit-modal').addEventListener('click', e => { if(e.target === e.currentTarget) closeEditModal(); });
 
-function esc(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/'/g,'&#39;').replace(/"/g,'&quot;');
-}
+// ── Init ──────────────────────────────────────────────────────
+const t = new Date();
+document.getElementById('date-picker').value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+onSliderChange();
 
-// Auto-refresh queue tab content when selections change
-function afterSelectionChange() {
-  if (activeTab === 'queue') renderQueueView();
-  updateQueueCount();
-}
-
-// Wrap selection functions to trigger queue refresh
-const origToggleVideoSelected = toggleVideoSelected;
-window.toggleVideoSelected = function(name, event) {
-  origToggleVideoSelected(name, event);
-  afterSelectionChange();
-};
-
-const origToggleCompany = toggleCompany;
-window.toggleCompany = function(id) {
-  origToggleCompany(id);
-  afterSelectionChange();
-};
-</script>
-
-<!-- Upload Video tab panel injected here -->
-<script>
-// Append upload panel to shell
-document.querySelector('.shell').insertAdjacentHTML('beforeend', `
-  <div class="tab-panel" id="panel-upload">
-    <div class="upload-grid">
-      <div class="side-box">
-        <div class="side-box-header"><span class="side-box-title">Video File</span></div>
-        <div class="side-box-body" style="padding:24px">
-          <div class="upload-drop" id="upload-drop" onclick="document.getElementById('file-input').click()">
-            <input type="file" id="file-input" accept="video/*" style="display:none" onchange="handleFileSelect(this)">
-            <div class="upload-icon">↑</div>
-            <div class="upload-label">Click to select a video file</div>
-            <div class="upload-sub">MP4, MOV, AVI, MXF accepted</div>
-          </div>
-          <div class="upload-file-info" id="upload-file-info" style="display:none">
-            <div class="upload-filename" id="upload-filename"></div>
-            <div class="upload-filesize" id="upload-filesize"></div>
-          </div>
-        </div>
-      </div>
-      <div class="side-box">
-        <div class="side-box-header"><span class="side-box-title">Endcard Placement</span></div>
-        <div class="side-box-body" style="padding:24px">
-          <div class="slider-label-row">
-            <span class="slider-label">Place endcard at</span>
-            <span class="slider-value" id="slider-value">0:00</span>
-          </div>
-          <input type="range" id="endcard-slider" min="0" max="300" value="0" step="1" class="endcard-slider" oninput="updateSlider(this.value)">
-          <div class="slider-sublabel">Logo and voiceover placeholders will be placed at this point in the new comp, lasting 5 seconds.</div>
-          <div class="upload-status" id="upload-status" style="display:none"></div>
-        </div>
-        <div class="side-box-footer">
-          <button class="btn-start-render" id="btn-upload" disabled onclick="uploadVideo()" style="width:100%">
-            <span>Upload &amp; Create Comp</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-`);
+(async () => {
+  await loadStates();
+  await loadCourses();
+  renderCourseList();
+})();
 </script>
 </body>
 </html>
