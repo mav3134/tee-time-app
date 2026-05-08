@@ -1,153 +1,155 @@
 const express = require('express');
-const fs      = require('fs');
 const path    = require('path');
-const { scrapeCourse } = require('./scraper');
+const crypto  = require('crypto');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// Use /data volume if available (Railway persistent volume), else local data dir
-const DATA_DIR     = process.env.DATA_DIR || path.join(__dirname, 'data');
-const COURSES_FILE = path.join(DATA_DIR, 'courses.json');
-const RESULTS_FILE = path.join(DATA_DIR, 'results.json');
+const RENDER_SECRET = process.env.RENDER_SECRET;
+if (!RENDER_SECRET) console.warn('RENDER_SECRET not set');
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(COURSES_FILE)) fs.writeFileSync(COURSES_FILE, '[]');
+function requireSecret(req, res, next) {
+  const token = req.headers['x-render-secret'];
+  if (!RENDER_SECRET || token === RENDER_SECRET) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
+let companies    = [];
+let comps        = [];
+let jobs         = {};
+let queuePaused  = false;
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// ── Companies ─────────────────────────────────────────────────────────────────
+app.post('/api/companies', requireSecret, (req, res) => {
+  companies = req.body.companies || [];
+  console.log('Companies:', companies.map(c => c.name).join(', '));
+  res.json({ success: true });
+});
+app.get('/api/companies', (req, res) => res.json({ success: true, companies }));
+
+// ── Comps ─────────────────────────────────────────────────────────────────────
+app.post('/api/comps', requireSecret, (req, res) => {
+  comps = req.body.comps || [];
+  console.log('Comps:', comps.join(', '));
+  res.json({ success: true });
+});
+app.get('/api/comps', (req, res) => res.json({ success: true, comps }));
+
+// ── Queue pause/resume (public — UI calls these) ──────────────────────────────
+app.get('/api/queue/status',   (req, res) => res.json({ paused: queuePaused }));
+app.post('/api/queue/pause',   (req, res) => { queuePaused = true;  res.json({ paused: true  }); });
+app.post('/api/queue/resume',  (req, res) => { queuePaused = false; res.json({ paused: false }); });
+
+// ── Jobs ──────────────────────────────────────────────────────────────────────
+
+// List all jobs — sorted by status priority then createdAt
+app.get('/api/jobs', (req, res) => {
+  const priority = { rendering: 0, pending: 1, error: 2, done: 3 };
+  const list = Object.values(jobs).sort((a, b) => {
+    const pd = (priority[a.status] ?? 4) - (priority[b.status] ?? 4);
+    if (pd !== 0) return pd;
+    return new Date(a.createdAt) - new Date(b.createdAt);
+  });
+  res.json({ success: true, jobs: list });
 });
 
-// ── Courses API ───────────────────────────────────────────────
+// Create job
+app.post('/api/jobs', (req, res) => {
+  const { companyId, compName, swapLogo, swapVO, format } = req.body;
+  if (!companyId) return res.status(400).json({ error: 'companyId required' });
+  if (!compName)  return res.status(400).json({ error: 'compName required' });
+  const company = companies.find(c => c.id === companyId);
+  if (!company) return res.status(404).json({ error: 'Company not found' });
 
-function readCourses() {
-  try { return JSON.parse(fs.readFileSync(COURSES_FILE, 'utf8')); }
-  catch { return []; }
-}
-
-function writeCourses(courses) {
-  fs.writeFileSync(COURSES_FILE, JSON.stringify(courses, null, 2));
-}
-
-app.get('/api/courses', (req, res) => {
-  res.json(readCourses());
+  const jobId = crypto.randomBytes(6).toString('hex');
+  jobs[jobId] = {
+    id: jobId, company: company.name, companyId: company.id,
+    compName, swapLogo: !!swapLogo, swapVO: !!swapVO,
+    format: format || 'mp4',
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    log: [],
+  };
+  console.log(`Job created: ${jobId} | ${compName} | ${company.name} | ${format || 'mp4'}`);
+  res.json({ success: true, jobId });
 });
 
-app.post('/api/courses', (req, res) => {
-  const { name, url, state } = req.body;
-  if (!name || !url) return res.status(400).json({ error: 'name and url required' });
-  const courses   = readCourses();
-  const newCourse = { id: Date.now(), name: name.trim(), url: url.trim(), state: state || 'Michigan' };
-  courses.push(newCourse);
-  writeCourses(courses);
-  res.json(newCourse);
+// Get single job
+app.get('/api/jobs/:jobId', (req, res) => {
+  const job = jobs[req.params.jobId];
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.json({ success: true, job });
 });
 
-app.delete('/api/courses/:id', (req, res) => {
-  const courses = readCourses().filter(c => c.id !== parseInt(req.params.id));
-  writeCourses(courses);
+// Delete a pending job (called from UI — no secret needed)
+app.delete('/api/jobs/:jobId', (req, res) => {
+  const job = jobs[req.params.jobId];
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.status !== 'pending') return res.status(400).json({ error: 'Only pending jobs can be deleted' });
+  delete jobs[req.params.jobId];
   res.json({ success: true });
 });
 
-app.patch('/api/courses/:id', (req, res) => {
-  const { name, url } = req.body;
-  const courses = readCourses();
-  const course  = courses.find(c => c.id === parseInt(req.params.id));
-  if (!course) return res.status(404).json({ error: 'Course not found' });
-  if (name) course.name = name.trim();
-  if (url)  course.url  = url.trim();
-  writeCourses(courses);
-  res.json(course);
+// Clear completed/error jobs (UI calls this)
+app.delete('/api/jobs', (req, res) => {
+  Object.keys(jobs).forEach(id => {
+    if (jobs[id].status === 'done' || jobs[id].status === 'error') delete jobs[id];
+  });
+  res.json({ success: true });
 });
 
-// ── States API ────────────────────────────────────────────────
-
-const STATES_FILE = path.join(DATA_DIR, 'states.json');
-if (!fs.existsSync(STATES_FILE)) fs.writeFileSync(STATES_FILE, '["Michigan"]');
-
-function readStates() {
-  try { return JSON.parse(fs.readFileSync(STATES_FILE, 'utf8')); }
-  catch { return ['Michigan']; }
-}
-
-app.get('/api/states', (req, res) => res.json(readStates()));
-
-app.post('/api/states', (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: 'name required' });
-  const states = readStates();
-  if (!states.includes(name.trim())) {
-    states.push(name.trim());
-    states.sort();
-    fs.writeFileSync(STATES_FILE, JSON.stringify(states, null, 2));
-  }
-  res.json(states);
+// Agent polls for next pending job — respects pause
+app.get('/api/jobs/pending/raw', requireSecret, (req, res) => {
+  res.type('text');
+  if (queuePaused) return res.send('');
+  const pending = Object.values(jobs)
+    .filter(j => j.status === 'pending')
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0];
+  if (!pending) return res.send('');
+  res.send([
+    pending.id, pending.companyId, pending.company,
+    pending.compName,
+    pending.swapLogo ? '1' : '0',
+    pending.swapVO   ? '1' : '0',
+    pending.format || 'mp4',
+  ].join('|'));
 });
 
-// ── Results ───────────────────────────────────────────────────
-
-let cachedResults = { results: [], lastRefresh: null };
-
-function readResults() {
-  try {
-    if (fs.existsSync(RESULTS_FILE))
-      return JSON.parse(fs.readFileSync(RESULTS_FILE, 'utf8'));
-  } catch { /* ignore */ }
-  return { results: [], lastRefresh: null };
-}
-
-function saveResults(data) {
-  cachedResults = data;
-  try { fs.writeFileSync(RESULTS_FILE, JSON.stringify(data, null, 2)); } catch { /* ignore */ }
-}
-
-cachedResults = readResults();
-
-app.get('/api/results', (req, res) => res.json(cachedResults));
-
-// ── Refresh ───────────────────────────────────────────────────
-
-app.post('/api/refresh', async (req, res) => {
-  const { date = '', courses = [] } = req.body;
-
-  if (!courses.length) {
-    return res.status(400).json({ error: 'No courses provided' });
-  }
-
-  const urlCount = {};
-  courses.forEach(c => { urlCount[c.url] = (urlCount[c.url] || 0) + 1; });
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-
-  const send    = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-  const results = [];
-
-  for (const course of courses) {
-    const filterByName = urlCount[course.url] > 1;
-    send({ type: 'progress', course: course.name, status: 'scraping' });
-    try {
-      const teeTimes = await scrapeCourse(course, date, filterByName);
-      results.push({ courseId: course.id, course: course.name, url: course.url, teeTimes, error: null });
-      send({ type: 'progress', course: course.name, status: 'done', count: teeTimes.length });
-    } catch (err) {
-      results.push({ courseId: course.id, course: course.name, url: course.url, teeTimes: [], error: err.message });
-      send({ type: 'progress', course: course.name, status: 'error', error: err.message });
-    }
-  }
-
-  const output = { results, lastRefresh: new Date().toISOString(), date };
-  saveResults(output);
-
-  send({ type: 'complete', lastRefresh: output.lastRefresh });
-  res.end();
+// Agent updates job
+app.patch('/api/jobs/:jobId', requireSecret, (req, res) => {
+  const job = jobs[req.params.jobId];
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  const { status, log } = req.body;
+  if (status) job.status = status;
+  if (log)    job.log.push(...(Array.isArray(log) ? log : [log]));
+  job.updatedAt = new Date().toISOString();
+  res.json({ success: true, job });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n⛳  Tee Time App running at http://localhost:${PORT}\n`);
-  console.log(`   Data directory: ${DATA_DIR}\n`);
+// ── Agent info (local IP for direct uploads) ──────────────────────────────────
+let agentInfo = null;
+
+app.post('/api/agent/info', requireSecret, (req, res) => {
+  agentInfo = req.body;
+  console.log('Agent info registered:', agentInfo);
+  res.json({ success: true });
 });
+
+app.get('/api/agent/info', (req, res) => {
+  res.json({ agentInfo });
+});
+
+// ── Agent status ──────────────────────────────────────────────────────────────
+let lastAgentPing = null;
+app.post('/api/agent/ping', requireSecret, (req, res) => {
+  lastAgentPing = new Date(); res.json({ success: true });
+});
+app.get('/api/agent/status', (req, res) => {
+  res.json({ connected: !!(lastAgentPing && (Date.now() - lastAgentPing) < 10000) });
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
