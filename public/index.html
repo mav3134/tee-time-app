@@ -619,6 +619,11 @@ async function startRefresh() {
             txt.textContent = `Scraping ${msg.course}…`;
           } else if (msg.status === 'done' || msg.status === 'error') {
             doneCount++;
+            // Show each course's times as soon as it finishes instead of waiting for all of them.
+            if (msg.result) {
+              const i = enabled.findIndex(c => c.name === msg.result.course);
+              if (i !== -1) { fillRow(i, msg.result.teeTimes, msg.result.error); applyTimeFilter(); }
+            }
             txt.textContent = `Done ${doneCount} of ${enabled.length} — ${msg.status === 'error' ? msg.course + ' failed' : msg.course + ' ✓'}`;
           }
         } else if (msg.type === 'complete') {

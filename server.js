@@ -1,10 +1,13 @@
 const express = require('express');
 const fs      = require('fs');
 const path    = require('path');
-const { scrapeCourse } = require('./scraper');
+const { scrapeCourse, closeBrowser } = require('./scraper');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+// How many courses to scrape at once. Each one is a browser tab, so raise this
+// on a beefy machine or lower it on a small one.
+const SCRAPE_CONCURRENCY = Math.max(1, parseInt(process.env.SCRAPE_CONCURRENCY, 10) || 4);
 
 // Use /data volume if available (Railway persistent volume), else local data dir
 const DATA_DIR     = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -125,20 +128,30 @@ app.post('/api/refresh', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const send    = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-  const results = [];
+  // Keep results in the same order as the courses were sent, even though they finish out of order.
+  const results = new Array(courses.length);
 
-  for (const course of courses) {
+  async function scrapeOne(course, i) {
     const filterByName = urlCount[course.url] > 1;
     send({ type: 'progress', course: course.name, status: 'scraping' });
     try {
       const teeTimes = await scrapeCourse(course, date, filterByName);
-      results.push({ courseId: course.id, course: course.name, url: course.url, teeTimes, error: null });
-      send({ type: 'progress', course: course.name, status: 'done', count: teeTimes.length });
+      results[i] = { courseId: course.id, course: course.name, url: course.url, teeTimes, error: null };
+      send({ type: 'progress', course: course.name, status: 'done', count: teeTimes.length, result: results[i] });
     } catch (err) {
-      results.push({ courseId: course.id, course: course.name, url: course.url, teeTimes: [], error: err.message });
-      send({ type: 'progress', course: course.name, status: 'error', error: err.message });
+      results[i] = { courseId: course.id, course: course.name, url: course.url, teeTimes: [], error: err.message };
+      send({ type: 'progress', course: course.name, status: 'error', error: err.message, result: results[i] });
     }
   }
+
+  let next = 0;
+  const worker = async () => {
+    while (next < courses.length) {
+      const i = next++;
+      await scrapeOne(courses[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SCRAPE_CONCURRENCY, courses.length) }, worker));
 
   const output = { results, lastRefresh: new Date().toISOString(), date };
   saveResults(output);
@@ -149,5 +162,13 @@ app.post('/api/refresh', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`\n⛳  Tee Time App running at http://localhost:${PORT}\n`);
-  console.log(`   Data directory: ${DATA_DIR}\n`);
+  console.log(`   Data directory: ${DATA_DIR}`);
+  console.log(`   Scraping up to ${SCRAPE_CONCURRENCY} courses at once\n`);
 });
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    await closeBrowser();
+    process.exit(0);
+  });
+}
