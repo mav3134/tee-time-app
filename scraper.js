@@ -3,12 +3,64 @@ const { chromium } = require('playwright');
 const START_H = 6;
 const END_H   = 18;
 
+// Resource types we never need to find tee times — skipping them makes pages load much faster.
+const BLOCKED_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
+const BLOCKED_URL_RE = /google-analytics|googletagmanager|doubleclick|facebook\.net|facebook\.com\/tr|hotjar|clarity\.ms|segment\.io|newrelic|nr-data/i;
+
+// ── Shared browser ────────────────────────────────────────────
+// Launching Chromium costs ~1-2s, so one browser is shared by all scrapes;
+// each course still gets its own isolated context (cookies, storage).
+let browserPromise = null;
+
+function getBrowser() {
+  if (!browserPromise) {
+    browserPromise = chromium.launch({ headless: true }).then(browser => {
+      browser.on('disconnected', () => { browserPromise = null; });
+      return browser;
+    }).catch(err => { browserPromise = null; throw err; });
+  }
+  return browserPromise;
+}
+
+async function closeBrowser() {
+  if (!browserPromise) return;
+  const p = browserPromise;
+  browserPromise = null;
+  try { await (await p).close(); } catch { /* ignore */ }
+}
+
+function looksLikeTeeTimeJson(text) {
+  return [parseKennaJson(text, '', {}, false), parseForeUpJson(text), parseTeesnapJson(text), parseGenericJson(text, null)]
+    .some(t => t !== null && t.length > 0);
+}
+
+// Wait until the page has what we need instead of sleeping a fixed amount:
+// returns shortly after a tee-time API response arrives, or once the network
+// goes quiet, and never later than maxMs (the old fixed wait).
+async function settle(page, hasData, maxMs) {
+  const deadline = Date.now() + maxMs;
+  const remaining = () => Math.max(0, deadline - Date.now());
+  let idle = false;
+  page.waitForLoadState('networkidle', { timeout: maxMs }).then(() => { idle = true; }, () => {});
+  while (remaining() > 0) {
+    if (hasData()) { await page.waitForTimeout(Math.min(750, remaining())); return; }
+    if (idle)      { await page.waitForTimeout(Math.min(1500, remaining())); return; }
+    await page.waitForTimeout(Math.min(200, remaining()));
+  }
+}
+
 async function scrapeCourse(course, dateStr, filterByName = false) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await getBrowser();
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   });
+  await context.route('**/*', (route) => {
+    const req = route.request();
+    if (BLOCKED_RESOURCE_TYPES.has(req.resourceType()) || BLOCKED_URL_RE.test(req.url())) return route.abort();
+    return route.continue();
+  });
   const page = await context.newPage();
+  const closeAll = () => context.close().catch(() => {});
 
   const interceptedResponses = [];
   let apiRequestHeaders = null;
@@ -18,6 +70,10 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
   const isTeesnap     = /teesnap\.net/i.test(course.url);
   const isTeeWire     = /teewire\.net/i.test(course.url);
   const isWebTrac     = /myvscloud\.com/i.test(course.url);
+
+  // True once a tee-time API response has been intercepted at or after index `from`.
+  let dataFoundAt = -1;
+  const hasDataSince = (from) => () => dataFoundAt >= from;
 
   page.on('request', (request) => {
     const url = request.url();
@@ -48,23 +104,27 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         interceptedResponses.push({ url, text });
       } else if (/\d{1,2}:\d{2}|tee.?time|teetime|slot|available|facilities/i.test(text)) {
         interceptedResponses.push({ url, text });
+      } else {
+        return;
       }
+      if (looksLikeTeeTimeJson(text)) dataFoundAt = interceptedResponses.length - 1;
     } catch { /* ignore */ }
   });
 
   try {
     const fetchUrl = buildUrl(course.url, dateStr);
-    await page.goto(fetchUrl, { waitUntil: 'load', timeout: 45000 });
+    await page.goto(fetchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
     const waitMs = (isForeUp || isTeesnap) ? 10000 : 6000;
-    await page.waitForTimeout(waitMs);
+    // foreUP index pages only show tee times after we click through, so don't stop early on data.
+    await settle(page, isForeUpIndex ? () => false : hasDataSince(0), waitMs);
 
     // ── foreUP index pages: select facility + click Public ────
     if (isForeUpIndex) {
       try {
         try {
           const select = page.locator('select').first();
-          if (await select.isVisible({ timeout: 3000 })) {
+          if (await select.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false)) {
             const optionData = await select.evaluate(el =>
               Array.from(el.options).map(o => ({ value: o.value, text: o.text.trim() }))
             );
@@ -85,10 +145,11 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
           console.log(`  [${course.name}] Dropdown selection skipped: ${e.message.substring(0, 80)}`);
         }
         const publicBtn = page.locator('button:has-text("Public"), a:has-text("Public"), input[value="Public"]').first();
-        if (await publicBtn.isVisible({ timeout: 5000 })) {
+        if (await publicBtn.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false)) {
+          const before = interceptedResponses.length;
           await publicBtn.click();
           console.log(`  [${course.name}] Clicked Public button`);
-          await page.waitForTimeout(6000);
+          await settle(page, hasDataSince(before), 6000);
         }
       } catch (e) {
         console.log(`  [${course.name}] Interaction error: ${e.message.substring(0, 100)}`);
@@ -104,7 +165,7 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
           return `date ${targetDate} not found in paginator`;
         }, dateStr);
         console.log(`  [${course.name}] TeeWire: ${clicked}`);
-        await page.waitForTimeout(3000);
+        await settle(page, () => false, 3000);
       } catch (e) {
         console.log(`  [${course.name}] TeeWire date error: ${e.message}`);
       }
@@ -163,7 +224,8 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         if (await searchBtn.isVisible({ timeout: 5000 })) {
           await searchBtn.click();
           console.log(`  [${course.name}] WebTrac: clicked Search`);
-          await page.waitForTimeout(6000);
+          await page.waitForLoadState('domcontentloaded', { timeout: 6000 }).catch(() => {});
+          await settle(page, () => false, 6000);
         }
       } catch (e) {
         console.log(`  [${course.name}] WebTrac interaction error: ${e.message.substring(0, 80)}`);
@@ -193,13 +255,13 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
           const refiredText = await response.text();
           console.log(`  [${course.name}] Re-fired preview: ${refiredText.substring(0, 300)}`);
           const kennaTimes = parseKennaJson(refiredText, course.name, facilityMap, filterByName);
-          if (kennaTimes !== null && kennaTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`); await browser.close(); return kennaTimes; }
+          if (kennaTimes !== null && kennaTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${kennaTimes.length} times (Kenna)`); return kennaTimes; }
           const foreUpTimes = parseForeUpJson(refiredText);
-          if (foreUpTimes !== null && foreUpTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${foreUpTimes.length} times (foreUP)`); await browser.close(); return foreUpTimes; }
+          if (foreUpTimes !== null && foreUpTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${foreUpTimes.length} times (foreUP)`); return foreUpTimes; }
           const teesnapTimes = parseTeesnapJson(refiredText);
-          if (teesnapTimes !== null && teesnapTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${teesnapTimes.length} times (Teesnap)`); await browser.close(); return teesnapTimes; }
+          if (teesnapTimes !== null && teesnapTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${teesnapTimes.length} times (Teesnap)`); return teesnapTimes; }
           const genericTimes = parseGenericJson(refiredText, filterByName ? course.name : null);
-          if (genericTimes !== null && genericTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${genericTimes.length} times (generic)`); await browser.close(); return genericTimes; }
+          if (genericTimes !== null && genericTimes.length > 0) { console.log(`  [${course.name}] ✓ Found ${genericTimes.length} times (generic)`); return genericTimes; }
           console.log(`  [${course.name}] Parsed 0 from re-fire`);
         } else {
           console.log(`  [${course.name}] Re-fire HTTP ${response.status()}`);
@@ -213,13 +275,13 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
       if (r.url.includes('/facilities') || r.url.includes('launchdarkly')) continue;
       console.log(`  [${course.name}] Trying: ${r.url.substring(0, 80)}`);
       const kennaTimes = parseKennaJson(r.text, course.name, facilityMap, filterByName);
-      if (kennaTimes !== null && kennaTimes.length > 0) { await browser.close(); return kennaTimes; }
+      if (kennaTimes !== null && kennaTimes.length > 0) { return kennaTimes; }
       const foreUpTimes = parseForeUpJson(r.text);
-      if (foreUpTimes !== null && foreUpTimes.length > 0) { await browser.close(); return foreUpTimes; }
+      if (foreUpTimes !== null && foreUpTimes.length > 0) { return foreUpTimes; }
       const teesnapTimes = parseTeesnapJson(r.text);
-      if (teesnapTimes !== null && teesnapTimes.length > 0) { await browser.close(); return teesnapTimes; }
+      if (teesnapTimes !== null && teesnapTimes.length > 0) { return teesnapTimes; }
       const genericTimes = parseGenericJson(r.text, filterByName ? course.name : null);
-      if (genericTimes !== null && genericTimes.length > 0) { await browser.close(); return genericTimes; }
+      if (genericTimes !== null && genericTimes.length > 0) { return genericTimes; }
     }
 
     // Claude AI fallback
@@ -232,7 +294,6 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
         const aiTimes = await parseWithClaude(candidate.text, course.name);
         if (aiTimes && aiTimes.length > 0) {
           console.log(`  [${course.name}] ✓ Found ${aiTimes.length} times (Claude AI)`);
-          await browser.close();
           return aiTimes;
         }
       }
@@ -240,12 +301,12 @@ async function scrapeCourse(course, dateStr, filterByName = false) {
 
     const teeTimes = await extractTeeTimes(page, course.url, filterByName ? course.name : null);
     console.log(`  [${course.name}] Text scrape found ${teeTimes.length} times`);
-    await browser.close();
     return teeTimes;
 
   } catch (err) {
-    await browser.close();
     throw new Error(err.message);
+  } finally {
+    await closeAll();
   }
 }
 
@@ -603,4 +664,4 @@ function extractPrice(ctx) {
 
 function normalizeTime(t) { return parseAnyTime(t); }
 
-module.exports = { scrapeCourse };
+module.exports = { scrapeCourse, closeBrowser };
